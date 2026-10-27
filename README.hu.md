@@ -55,6 +55,29 @@ Az első futás letölti ezeket a modelleket:
 - Az elfogadást a `config.yaml`-ban az `xtts_accept_license: true` sor jelzi.
 - Ha nem fogadod el, használd a `tts: edge` motort. Ez online Microsoft-hangokkal dolgozik, klónozás nélkül; a hangot a hangtípus alapján választja.
 
+## Webes felület
+
+Helyben futó webes felület angolul és magyarul (Gradio). Csak erről a gépről érhető el.
+
+```bash
+uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
+```
+
+- **Szinkron:**
+  - videó feltöltése, ez új munkát hoz létre a `work/<név>/` mappában;
+  - indítás, leállítás, folytatás vagy újrafuttatás egy választott lépéstől;
+  - lépésenkénti haladás és élő napló;
+  - ha az Ollama nem fut, egy gombbal elindítható.
+- **Beállítások:** fordítómodell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
+- **Eredmény:** a szinkronizált videó lejátszása (a böngésző a magyar sávot játssza), az MP4, a felirat és a riport letöltése, a riport megjelenítése.
+- **Beszélők:**
+  - beszélőnként a felismert hangtípus és az alaphang;
+  - meghallgatható az eredeti hangminta és a klónozott hang;
+  - a hangtípus kézzel átállítható, utána újrafuttatás a voices lépéstől;
+  - előnézet arról, hány beszélő jön ki az egyes küszöbértékekkel.
+
+A nyelv a böngészőt követi, a jobb felső sarokban átváltható. Egyszerre egy munka fut, így elég a 16 GB memória. A futás akkor is folytatódik a háttérben, ha a felületet bezárod; újraindítás után a felület újra megtalálja. A parancssorból indított munkák is megjelennek a felületen.
+
 ## Használat
 
 ```bash

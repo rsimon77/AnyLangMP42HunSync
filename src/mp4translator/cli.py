@@ -170,6 +170,17 @@ def speakers(
 
 
 @app.command()
+def ui(
+    port: Annotated[int, typer.Option(help="Port (csak a 127.0.0.1-en figyel)")] = 7860,
+    open_browser: Annotated[bool, typer.Option("--open/--no-open", help="Böngésző megnyitása")] = True,
+) -> None:
+    """Helyi webes felület (angol/magyar): feltöltés, beállítások, futtatás, eredmény, beszélők."""
+    from .webui.app import launch
+
+    launch(Path.cwd(), port=port, open_browser=open_browser)
+
+
+@app.command()
 def steps() -> None:
     """Kiírja a lépések sorrendjét."""
     for i, name in enumerate(STEP_NAMES, 1):

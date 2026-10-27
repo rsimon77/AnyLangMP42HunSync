@@ -55,6 +55,29 @@ The first run downloads these models:
 - To accept the license, set `xtts_accept_license: true` in `config.yaml`.
 - If you do not accept it, use `tts: edge`. This uses online Microsoft voices without cloning, chosen by voice type.
 
+## Web UI
+
+A local web interface in English and Hungarian (built with Gradio). It is reachable only from this machine.
+
+```bash
+uv run mp4translator ui          # opens http://127.0.0.1:7860
+```
+
+- **Dubbing:**
+  - upload a video, which creates a job in `work/<name>/`;
+  - start, stop and resume it, or rerun from a chosen step;
+  - follow the step progress and the live log;
+  - start Ollama with one click if it is not running.
+- **Settings:** translation model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
+- **Result:** watch the dubbed video (the browser plays the Hungarian track), download the MP4, the subtitle and the report, and read the report.
+- **Speakers:**
+  - see each speaker's detected voice type and pitch;
+  - listen to the original sample and the cloned voice;
+  - override the voice type and rerun from the voices step;
+  - preview the speaker count per clustering threshold.
+
+The language follows the browser and can be switched at the top right. Only one job runs at a time; this keeps 16 GB of RAM enough. A job keeps running in the background even if the UI is closed, and the UI picks it up again when restarted. Jobs started from the command line also appear in the UI.
+
 ## Usage
 
 ```bash

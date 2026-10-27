@@ -6,13 +6,26 @@
 - 67 egységteszt, mind átmegy.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Webes felület (2026-10-27)
+- `uv run mp4translator ui`: Gradio, angol/magyar, a `127.0.0.1:7860`-on. A kód a `src/mp4translator/webui/` mappában van:
+  - `jobs.py`: munkák kezelése, a futás külön folyamatban a CLI-n keresztül;
+  - `i18n.py`: a felület szövegei;
+  - `app.py`: maga a felület.
+- A böngészőben kipróbálva a mintavideón:
+  - indítás, élő napló, leállítás és folytatás;
+  - Eredmény fül;
+  - Beszélők fül: a kézi hangtípus és az újrafuttatás a voices lépéstől működik;
+  - küszöb-előnézet és nyelvváltás.
+- A feltöltés gombot a böngészőben nem próbáltam ki: a tesztben a munkát Pythonból hoztam létre, a `Workspace.create` egységteszttel ellenőrzött.
+- Megfigyelés: a rövidítési körben a modell egyszer „AI”-t írt a „mesterséges intelligencia” helyett.
+
 ## Barbie-videó – kész (2026-10-27)
 Kimenet: `output/barbie_hu.mp4`: magyar hangsáv (alapértelmezett) + eredeti angol sáv; felirat: `output/barbie_hu.hu.srt`. Riport: `work/barbie/report.md`.
 
 - A `--from-step synthesize` most minden szegmenst újragenerál (korábban a kész szegmenseket átugrotta); folytatáskor továbbra is csak a hiányzókat.
 - Teljes futás az elejétől, az új (kétmenetes) kóddal: **20 perc 18 mp**, a swap nem nőtt. Részletek: OPTIMIZATION.md, „Eredmény” szakasz.
 - A futásban 166 szegmens és 5 beszélő volt. A régi futásban 162 szegmens és 6 beszélő: az átírás kissé másképp tagolt, és ettől változott a csoportosítás is.
-- Tesztek: 94, mind átmegy (új: `tests/test_synthesize.py`).
+- Tesztek: 128, mind átmegy (új: `tests/test_synthesize.py`).
 - Nyitott kérdések:
   - A mért tempó minden beszélőnél 4,0–4,6 szótag/mp. Az SPK2 a 4,0-s alsó határra lett szorítva, ezt ellenőrizni kell.
   - ~~A hossz-ellenőrzés a beszélő mért tempóját használja a 6,0 helyett~~ – javítva (93 teszt átmegy). Korábban emiatt kellett 91 újrapróbálkozás; újrafuttatva a synthesize 610 → 395 mp, az újrapróbálások 91 → 44 (OPTIMIZATION.md).
