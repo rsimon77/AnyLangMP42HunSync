@@ -148,3 +148,28 @@ def test_tail_strips_colors_and_progress_redraws(tmp_path):
     log = tmp_path / "run.log"
     log.write_text("\x1b[1;36m▶ separate\x1b[0m\n  0%|  |\r 50%|##|\r100%|####|\n\n  kész\n")
     assert tail(log) == "▶ separate\n100%||\n  kész"
+
+
+def test_stop_ollama_signals_serve_processes(monkeypatch):
+    killed, alive = [], iter([True, False])
+    monkeypatch.setattr(jobs_mod, "ollama_pids", lambda: [111, 222])
+    monkeypatch.setattr(jobs_mod.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+    monkeypatch.setattr(jobs_mod, "ollama_ok", lambda host: next(alive))
+    monkeypatch.setattr(jobs_mod.time, "sleep", lambda s: None)
+    assert jobs_mod.stop_ollama("http://x")
+    assert killed == [(111, jobs_mod.signal.SIGTERM), (222, jobs_mod.signal.SIGTERM)]
+
+
+def test_stop_ollama_reports_when_still_up(monkeypatch):
+    monkeypatch.setattr(jobs_mod, "ollama_pids", lambda: [])
+    monkeypatch.setattr(jobs_mod, "ollama_ok", lambda host: True)
+    assert not jobs_mod.stop_ollama("http://x", timeout=0.01)
+
+
+def test_restart_ollama(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(jobs_mod, "stop_ollama", lambda host: calls.append("stop"))
+    monkeypatch.setattr(jobs_mod, "start_ollama", lambda root: calls.append("start"))
+    monkeypatch.setattr(jobs_mod, "ollama_ok", lambda host: True)
+    assert jobs_mod.restart_ollama(tmp_path, "http://x")
+    assert calls == ["stop", "start"]

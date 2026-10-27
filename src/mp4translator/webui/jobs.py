@@ -8,8 +8,10 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import time
 import unicodedata
 from dataclasses import dataclass
 from pathlib import Path
@@ -225,3 +227,36 @@ def start_ollama(root: Path) -> None:
     log.parent.mkdir(parents=True, exist_ok=True)
     with log.open("a") as f:
         subprocess.Popen(["ollama", "serve"], stdout=f, stderr=subprocess.STDOUT, env=env, start_new_session=True)
+
+
+def ollama_pids() -> list[int]:
+    """Az „ollama serve” folyamatok (a felületről, terminálból vagy brew szolgáltatásként indítottak is)."""
+    out = subprocess.run(["pgrep", "-f", "ollama serve"], capture_output=True, text=True).stdout
+    return [int(p) for p in out.split() if p.strip().isdigit()]
+
+
+def stop_ollama(host: str, timeout: float = 10.0) -> bool:
+    """Leállítja az Ollamát (felszabadul a modell memóriája); True, ha utána már nem válaszol."""
+    for pid in ollama_pids():
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if not ollama_ok(host):
+            return True
+        time.sleep(0.3)
+    return False
+
+
+def restart_ollama(root: Path, host: str, timeout: float = 15.0) -> bool:
+    """Leállítás, majd újraindítás; True, ha az új példány válaszol."""
+    stop_ollama(host)
+    start_ollama(root)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if ollama_ok(host):
+            return True
+        time.sleep(0.3)
+    return False

@@ -9,7 +9,7 @@ import numpy as np
 from ..pipeline import STEP_NAMES
 from ..steps.synthesize import is_synthesized
 from .i18n import LANGS, pick_lang, t
-from .jobs import Job, Workspace, ollama_ok, start_ollama, step_states, tail
+from .jobs import Job, Workspace, ollama_ok, restart_ollama, start_ollama, step_states, stop_ollama, tail
 
 STATE_ICON = {"done": "✅", "running": "⏳", "paused": "⏸️", "pending": "▫️"}
 KINDS = ["auto", "male", "female", "child"]
@@ -59,6 +59,13 @@ def build(ws: Workspace) -> gr.Blocks:
                 )
                 ollama_md = gr.Markdown()
                 ollama_btn = tr(gr.Button(t("en", "ollama_start"), size="sm", visible=False), "ollama_start", "value")
+                with gr.Row():
+                    ollama_stop_btn = tr(
+                        gr.Button(t("en", "ollama_stop"), size="sm", visible=False), "ollama_stop", "value"
+                    )
+                    ollama_restart_btn = tr(
+                        gr.Button(t("en", "ollama_restart"), size="sm", visible=False), "ollama_restart", "value"
+                    )
 
         with gr.Tabs():
             # --- 1. Szinkron ---
@@ -152,7 +159,12 @@ def build(ws: Workspace) -> gr.Blocks:
             job = job_of(name)
             running = ws.running()
             up = ollama_ok(host)
-            ollama = (t(lang, "ollama_ok") if up else t(lang, "ollama_down"), gr.update(visible=not up))
+            ollama = (
+                t(lang, "ollama_ok") if up else t(lang, "ollama_down"),
+                gr.update(visible=not up),
+                gr.update(visible=up),
+                gr.update(visible=up),
+            )
             if job is None:
                 return (t(lang, "no_job"), "", "", gr.update(interactive=False), gr.update(interactive=False), *ollama)
             from .. import runlock
@@ -183,7 +195,8 @@ def build(ws: Workspace) -> gr.Blocks:
                 *ollama,
             )
 
-        status_outputs = [status_md, steps_md, log_box, start_btn, stop_btn, ollama_md, ollama_btn]
+        status_outputs = [status_md, steps_md, log_box, start_btn, stop_btn, ollama_md, ollama_btn, ollama_stop_btn,
+                          ollama_restart_btn]
 
         def on_upload(path, lang):
             if not path:
@@ -214,6 +227,26 @@ def build(ws: Workspace) -> gr.Blocks:
 
         def on_start_ollama(lang):
             start_ollama(ws.root)
+
+        def ollama_guard(lang):
+            """Futás közben ne állítsuk le: a fordítás és a rövidítés az Ollamát használja."""
+            busy = ws.running()
+            if busy is not None:
+                raise gr.Error(t(lang, "ollama_busy", name=busy.name))
+
+        def on_stop_ollama(lang):
+            ollama_guard(lang)
+            if stop_ollama(host):
+                gr.Info(t(lang, "ollama_stopped"))
+            else:
+                gr.Warning(t(lang, "ollama_stop_failed"))
+
+        def on_restart_ollama(lang):
+            ollama_guard(lang)
+            if restart_ollama(ws.root, host):
+                gr.Info(t(lang, "ollama_restarted"))
+            else:
+                gr.Warning(t(lang, "ollama_restart_failed"))
 
         # --- beállítások ---
 
@@ -370,6 +403,8 @@ def build(ws: Workspace) -> gr.Blocks:
             refresh, [job_dd, lang], status_outputs
         )
         ollama_btn.click(on_start_ollama, lang)
+        ollama_stop_btn.click(on_stop_ollama, lang).then(refresh, [job_dd, lang], status_outputs)
+        ollama_restart_btn.click(on_restart_ollama, lang).then(refresh, [job_dd, lang], status_outputs)
         save_btn.click(save_settings, [job_dd, lang] + settings_fields)
         tab_settings.select(load_settings, job_dd, settings_fields)
         tab_result.select(load_result, [job_dd, lang], [video, downloads, report_md])
