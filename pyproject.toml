@@ -1,0 +1,44 @@
+[project]
+name = "mp4translator"
+version = "0.1.0"
+description = "Angol videók magyar AI szinkronja ingyenes modellekkel"
+readme = "README.md"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "mlx-whisper>=0.4",
+    "edge-tts>=7.0",
+    "httpx>=0.27",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "typer>=0.12",
+    "rich>=13.7",
+    "demucs>=4.1.0",
+    "coqui-tts[codec]>=0.28.0",
+    "torch>=2.11,<2.12",
+    "torchaudio>=2.11,<2.12",
+    "soxr>=1.1.0",
+    "scikit-learn>=1.9.1",
+]
+
+[project.scripts]
+mp4translator = "mp4translator.cli:app"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mp4translator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.uv]
+# Az alkalmazás Apple Silicon Mac-re készül (MLX).
+environments = ["sys_platform == 'darwin' and platform_machine == 'arm64'"]

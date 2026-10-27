@@ -1,0 +1,51 @@
+# Mp4Translator beállítások. Minden kulcs opcionális; a hiányzók az alapértéket kapják
+# (lásd src/mp4translator/config.py).
+
+max_duration_s: 600            # max. 10 perces videó
+
+# Beszédfelismerés (MLX Whisper)
+whisper_model: mlx-community/whisper-large-v3-turbo
+
+# Fordítás: "ollama:<modell>"
+llm: ollama:gemma3:12b
+ollama_host: http://localhost:11434
+llm_num_ctx: 4096              # kisebb kontextus → kevesebb memória
+# shorten_llm: ollama:gemma3:4b  # opcionális kisebb modell a rövidítéshez (előbb: ollama pull gemma3:4b)
+formality: tegezo              # tegezo | magazo
+syllables_per_second: 6.0      # magyar beszédtempó a szótagkerethez
+
+# Számítás: auto (Apple GPU, ha elérhető) | mps | cpu
+torch_device: auto
+
+# Háttér: separate (Demucs leválasztja a zenét/zajokat) | duck (eredeti hang lehalkítva) | none
+background: separate
+demucs_model: htdemucs
+
+# Beszédszintézis: xtts (helyi, hangklónozás) | edge (online Microsoft-hang, klónozás nélkül)
+tts: xtts
+# Az XTTS-v2 licence (Coqui Public Model License) csak nem kereskedelmi felhasználást enged.
+# Elfogadásához állítsd true-ra:
+xtts_accept_license: true
+xtts_temperature: 0.65
+edge_voice: hu-HU-TamasNeural  # vagy hu-HU-NoemiNeural (női hang)
+
+# Beszélők szétválogatása (több szereplős videókhoz)
+diarize: true
+speaker_threshold: 0.45        # nagyobb érték → kevesebb, összevontabb beszélő
+min_speaker_seconds: 10.0      # hangolás: uv run mp4translator speakers --workdir work/<videó>
+ref_audio_seconds: 12.0
+
+# Időzítés-illesztés
+gap_borrow_ratio: 0.8          # a következő szünet ekkora része használható fel
+soft_speedup: 1.15             # eddig gyorsítunk rövidítés nélkül
+max_speedup: 1.3               # végső határ
+shorten_rounds: 2              # ennyiszer kérünk rövidebb fordítást
+resynth_min_speed: 1.10        # eddig utólagos nyújtás, efölött újragenerálás gyorsabb tempóval
+
+duck_db: -22                   # csak background: duck esetén
+
+keep_original_audio: true      # eredeti angol hangsáv megtartása második sávként
+write_srt: true
+
+# Terminológia: angol kifejezés -> kötelező magyar fordítás
+glossary: {}

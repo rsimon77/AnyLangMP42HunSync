@@ -218,3 +218,11 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Mp4Translator
+/work
+/output
+/*.nosync
+/samples
+.DS_Store
+.claude/
