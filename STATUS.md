@@ -11,10 +11,15 @@
   - Webes felületen: legördülő listák, és egy gomb letölti a kiválasztott Ollama-modellt, haladásjelzővel.
   - A gondolkodó modellek (qwen3, gemma4) `think: false`-t kapnak.
   - Csak a Gemma 3 12B van magyarra kipróbálva; a többi letöltése és meghallgatása még hátravan.
-- **Új hangmotor: nincs beépítve.** A kutatás szerint a két jelölt:
-  - OmniVoice (k2-fsa, magyart tud, sebességparamétere van, MPS-en fut, nem kereskedelmi licenc);
-  - F5-TTS magyar finomhangolás (Maxdorger29).
-  A csomagok telepítéséhez külön engedély kell, ezért ez kimaradt.
+- **Új hangmotor: az OmniVoice kipróbálva, nem lett beépítve** (2026-10-27).
+  - Összevetés az XTTS-sel ugyanazon a két hangmintán (gyerek és női hang), ugyanazzal a 4 magyar mondattal. Az érthetőséget a Whisper magyar átírása mérte (szóegyezés a célszöveggel):
+    - XTTS: 0,83 és 0,91;
+    - OmniVoice, 32 lépés: 0,39 és 0,52 (pl. „hitfigyett” a „hétvégét” helyett);
+    - OmniVoice, 16 vagy 8 lépés: 0,16–0,23.
+  - Sebesség MPS-en: az OmniVoice kb. 9–10 mp mondatonként 32 lépéssel (8 lépéssel 2,7 mp); az XTTS 1–3,6 mp. A kötegelt generálás nem gyorsít.
+  - Előnyei: a gyerekhang magassága közelebb marad az eredetihez, és a `duration` paraméterrel pontos hosszra generál (3,0 mp kérve → 3,1–3,2 mp lett).
+  - Meghallgatható: `work/omnivoice_test/xtts_vs_omnivoice.wav` (felváltva XTTS, majd OmniVoice).
+  - A következő jelölt a magyarra finomhangolt F5-TTS (Maxdorger29/f5-tts-hungarian, kb. 270 óra magyar beszéd).
 - A kódátnézés javításai:
   - XTTS: nem omlik össze, ha minden próbálkozás üres hangot ad;
   - minden Ollama-hiba (500-as hiba, időtúllépés) `LLMError`, így a rövidítés helyett gyorsítás jön;
