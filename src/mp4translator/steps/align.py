@@ -1,5 +1,6 @@
 """[7] Időzítés-illesztés: döntés szegmensenként, majd a magyar beszédsáv összeállítása."""
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -40,6 +41,8 @@ def run(ctx: Context) -> None:
     m, sr = ctx.manifest, ctx.cfg.sample_rate
     track = np.zeros(int(np.ceil(m.duration * sr)), dtype=np.float32)
 
+    sources: list[Path] = []
+    stretch: list[tuple[Path, Path, float, float]] = []
     for seg in m.segments:
         if not seg.tts_file:
             raise StepError(f"A(z) {seg.id}. szegmenshez nincs hangfájl – előbb a synthesize lépés kell.")
@@ -47,13 +50,19 @@ def run(ctx: Context) -> None:
         speaker = m.speakers.get(seg.speaker)
         shift = speaker.pitch_shift if speaker else 0.0
         if seg.speed_factor > 1.001 or shift:
-            stretched = ctx.path(f"tts/seg_{seg.id:04d}_fit.wav")
-            time_stretch(src, stretched, seg.speed_factor, shift)
-            src = stretched
+            dst = ctx.path(f"tts/seg_{seg.id:04d}_fit.wav")
+            stretch.append((src, dst, seg.speed_factor, shift))
+            src = dst
+        sources.append(src)
+    # Szegmensenként egy ffmpeg-folyamat: párhuzamosan futtatva többszörösen gyorsabb
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        list(pool.map(lambda job: time_stretch(*job), stretch))
+
+    for seg, src in zip(m.segments, sources):
         y, file_sr = read_mono(src)
         if file_sr != sr:
-            raise StepError(f"Váratlan mintavétel ({file_sr} Hz) a(z) {Path(src).name} fájlban.")
-        a = int(round(seg.start * sr))
+            raise StepError(f"Váratlan mintavétel ({file_sr} Hz) a(z) {src.name} fájlban.")
+        a = min(int(round(seg.start * sr)), track.size)
         b = min(a + y.size, track.size)
         track[a:b] += y[: b - a]
 

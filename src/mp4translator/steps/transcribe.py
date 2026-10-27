@@ -58,6 +58,19 @@ def group_words(
     return segments
 
 
+def release_whisper() -> None:
+    """Az mlx-whisper osztályszinten gyorsítótárazza a modellt; enélkül a futás végéig a memóriában maradna."""
+    import gc
+
+    import mlx.core as mx
+    from mlx_whisper.transcribe import ModelHolder
+
+    ModelHolder.model = None
+    ModelHolder.model_path = None
+    gc.collect()
+    mx.clear_cache()
+
+
 def run(ctx: Context) -> None:
     import mlx_whisper
 
@@ -73,6 +86,7 @@ def run(ctx: Context) -> None:
         word_timestamps=True,
         condition_on_previous_text=False,
     )
+    release_whisper()
     words = [
         Word(w["word"], float(w["start"]), float(w["end"]))
         for seg in result.get("segments", [])

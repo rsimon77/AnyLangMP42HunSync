@@ -166,7 +166,7 @@ def run(ctx: Context) -> None:
         return
 
     embedded, embs_arr = segment_embeddings(ctx, y, sr)
-    for old in ctx.path("speakers/x").parent.glob("SPK*.wav"):
+    for old in (ctx.workdir / "speakers").glob("SPK*.wav"):
         old.unlink()
 
     if cfg.diarize:
@@ -206,7 +206,7 @@ def run(ctx: Context) -> None:
         speaker.clone_f0 = median_f0_of_files(calibration_files(ref_path.parent, name))
         speaker.pitch_shift = pitch_correction(speaker.f0, speaker.clone_f0, speaker.kind, cfg)
         m.speakers[name] = speaker
+        rate = f"{speaker.syllables_per_second:.1f} szótag/mp" if speaker.syllables_per_second else "nem mérhető"
         ctx.console.print(
-            f"  {describe(name, speaker)}; {seconds:.0f} mp beszéd, {ref.size / sr:.1f} mp hangminta, "
-            f"tempó {speaker.syllables_per_second:.1f} szótag/mp"
+            f"  {describe(name, speaker)}; {seconds:.0f} mp beszéd, {ref.size / sr:.1f} mp hangminta, tempó {rate}"
         )

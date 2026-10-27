@@ -5,6 +5,7 @@ import gc
 import math
 import os
 import tempfile
+import time
 from pathlib import Path
 from typing import Protocol
 
@@ -44,6 +45,19 @@ class TTSEngine(Protocol):
     def close(self) -> None: ...
 
 
+class SpeakerEmbedder(Protocol):
+    def embed(self, audio: Path) -> np.ndarray:
+        """Beszélő-azonosító vektor (normált) egy hangrészletből – a beszélők szétválogatásához."""
+        ...
+
+
+def write_atomic(out: Path, y: np.ndarray, sr: int) -> None:
+    """Ideiglenes névre ír, majd átnevez: megszakításkor nem marad félig írt WAV a végleges néven."""
+    tmp = out.with_name(out.stem + ".part.wav")
+    sf.write(str(tmp), y, sr)
+    tmp.replace(out)
+
+
 class EdgeTTSEngine:
     supports_speed = True
     clones_voice = False
@@ -75,13 +89,14 @@ class EdgeTTSEngine:
                 try:
                     asyncio.run(edge_tts.Communicate(text, voice, rate=rate, pitch=pitch).save(str(mp3)))
                     break
-                except Exception:
+                except Exception:  # hálózati hiba: rövid várakozás után újra
                     if attempt == 2:
                         raise
+                    time.sleep(2**attempt)
             to_wav(mp3, wav, self.sample_rate, channels=1)
             y, sr = read_mono(wav)
         y = trim_silence(y, sr)
-        sf.write(str(out), y, sr)
+        write_atomic(out, y, sr)
         return y.size / sr
 
     def close(self) -> None:
@@ -175,11 +190,11 @@ class XTTSEngine:
             self.last_attempts = attempt
             y = self._generate(text, speaker, speed)
             score = plausible_duration(y.size / self.sample_rate * speed, text, rate)
-            if score < best_score:
+            if best is None or score < best_score:
                 best, best_score = y, score
             if score < math.log(1.6):  # a várt hossz 0,63–1,6-szorosa elfogadható
                 break
-        sf.write(str(out), best, self.sample_rate)
+        write_atomic(out, best, self.sample_rate)
         return best.size / self.sample_rate
 
     def close(self) -> None:

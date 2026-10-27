@@ -11,6 +11,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import threading
 import time
 import unicodedata
 from dataclasses import dataclass
@@ -47,7 +48,10 @@ class Job:
 
     def manifest(self) -> Manifest | None:
         p = self.workdir / "manifest.json"
-        return Manifest.load(p) if p.exists() else None
+        try:
+            return Manifest.load(p) if p.exists() else None
+        except (ValueError, OSError):  # félig írt vagy kézzel elrontott manifest
+            return None
 
 
 class Workspace:
@@ -58,6 +62,7 @@ class Workspace:
         self.work = root / "work"
         self.outputs = root / "output"
         self._procs: dict[str, subprocess.Popen] = {}  # a felületről indított, még élő folyamatok
+        self._lock = threading.Lock()  # a Gradio szálakon futtatja a kezelőket: ellenőrzés + indítás egyben
 
     # --- munkák ---
 
@@ -74,12 +79,15 @@ class Workspace:
     def load(self, name: str) -> Job | None:
         wd = self.work / name
         meta = wd / JOB_FILE
-        if meta.exists():
-            data = json.loads(meta.read_text(encoding="utf-8"))
-            return Job(name, wd, Path(data["source"]), Path(data["output"]))
-        if (wd / "manifest.json").exists():  # parancssorból indított munka
-            m = Manifest.load(wd / "manifest.json")
-            return Job(name, wd, Path(m.source), self.outputs / f"{name}_hu.mp4")
+        try:
+            if meta.exists():
+                data = json.loads(meta.read_text(encoding="utf-8"))
+                return Job(name, wd, Path(data["source"]), Path(data["output"]))
+            if (wd / "manifest.json").exists():  # parancssorból indított munka
+                m = Manifest.load(wd / "manifest.json")
+                return Job(name, wd, Path(m.source), self.outputs / f"{name}_hu.mp4")
+        except (ValueError, KeyError, OSError):  # egy sérült munka ne tegye tönkre az egész felületet
+            return None
         return None
 
     def create(self, upload: Path) -> Job:
@@ -128,10 +136,11 @@ class Workspace:
         for name, proc in list(self._procs.items()):
             if proc.poll() is None:
                 return self.load(name)
-            del self._procs[name]
-        for job in self.jobs():
-            if runlock.running_pid(job.workdir) is not None:
-                return job
+            self._procs.pop(name, None)
+        # parancssorból indított futás: elég a zárfájlokat nézni (a manifestek beolvasása drága lenne)
+        for lock in sorted(self.work.glob(f"*/{runlock.LOCK_NAME}")) if self.work.exists() else []:
+            if runlock.running_pid(lock.parent) is not None:
+                return self.load(lock.parent.name)
         return None
 
     def command(self, job: Job, from_step: str | None = None) -> list[str]:
@@ -148,17 +157,17 @@ class Workspace:
         return cmd
 
     def start(self, job: Job, from_step: str | None = None) -> None:
-        busy = self.running()
-        if busy is not None:
-            raise RuntimeError(f"Már fut egy feldolgozás: {busy.name}")
-        job.output.parent.mkdir(parents=True, exist_ok=True)
-        log = job.log_path.open("a", encoding="utf-8")
-        env = {**os.environ, "PYTHONUNBUFFERED": "1", "COLUMNS": "120", "NO_COLOR": "1", "TERM": "dumb"}
-        self._procs[job.name] = subprocess.Popen(
-            self.command(job, from_step), cwd=self.root, stdout=log, stderr=subprocess.STDOUT, env=env,
-            start_new_session=True,  # a felület leállítása ne vigye magával a futást
-        )
-        log.close()
+        with self._lock:
+            busy = self.running()
+            if busy is not None:
+                raise RuntimeError(f"Már fut egy feldolgozás: {busy.name}")
+            job.output.parent.mkdir(parents=True, exist_ok=True)
+            env = {**os.environ, "PYTHONUNBUFFERED": "1", "COLUMNS": "120", "NO_COLOR": "1", "TERM": "dumb"}
+            with job.log_path.open("a", encoding="utf-8") as log:
+                self._procs[job.name] = subprocess.Popen(
+                    self.command(job, from_step), cwd=self.root, stdout=log, stderr=subprocess.STDOUT, env=env,
+                    start_new_session=True,  # a felület leállítása ne vigye magával a futást
+                )
 
     def stop(self, job: Job) -> bool:
         return runlock.request_stop(job.workdir) is not None
@@ -181,10 +190,13 @@ def step_states(m: Manifest | None, running: bool) -> list[tuple[str, str]]:
     return out
 
 
-def tail(path: Path, lines: int = 30) -> str:
+def tail(path: Path, lines: int = 30, max_bytes: int = 64_000) -> str:
     if not path.exists():
         return ""
-    text = ANSI.sub("", path.read_bytes().decode("utf-8", errors="replace"))  # read_text a \\r-t sortörésre cserélné
+    with path.open("rb") as f:  # csak a vége kell: a napló futásról futásra nő
+        f.seek(max(f.seek(0, os.SEEK_END) - max_bytes, 0))
+        data = f.read()
+    text = ANSI.sub("", data.decode("utf-8", errors="replace"))  # read_text a \\r-t sortörésre cserélné
     # a folyamatjelzők \r-rel írják felül magukat: soronként csak az utolsó állapot kell
     rows = [ln.rsplit("\r", 1)[-1] for ln in text.split("\n")]
     rows = [BAR.sub("", ln) for ln in rows]

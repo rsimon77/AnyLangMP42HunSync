@@ -2,11 +2,11 @@
 
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 
 from ..config import Config
 from ..context import Context, StepError
-from ..llm import LLMBackend
+from ..llm import LLMBackend, LLMError
 from ..manifest import Manifest, Segment
 from ..text import count_hu_syllables
 from ..voice_kind import KIND_PROMPT
@@ -14,13 +14,18 @@ from ..voice_kind import KIND_PROMPT
 NAME = "translate"
 
 
-class Item(BaseModel):
-    id: int
-    text: str
+def key(seg_id: int) -> str:
+    return f"s{seg_id}"
 
 
-class Batch(BaseModel):
-    translations: list[Item]
+def answer_schema(ids: list[int]) -> type[BaseModel]:
+    """Szegmensenként egy kulcs ({"s12": "<magyar>"}): kb. 15%-kal kevesebb token, mint az id/text párok listája
+    (a fordítás ideje a kimenet hosszával arányos), és a séma minden szegmensre kikényszeríti a választ."""
+    return create_model("Answers", **{key(i): (str, ...) for i in ids})
+
+
+def answers(batch: BaseModel) -> dict[int, str]:
+    return {int(k[1:]): v.strip() for k, v in batch.model_dump(exclude_unset=True).items() if v and v.strip()}
 
 
 def system_prompt(cfg: Config) -> str:
@@ -78,14 +83,14 @@ def translate_batch(ctx: Context, start: int, stop: int) -> None:
     cfg, m = ctx.cfg, ctx.manifest
     k = cfg.context_segments
     before = [
-        {"id": s.id, "en": s.text_en, "hu": s.text_hu} for s in m.segments[max(start - k, 0) : start] if s.text_hu
+        {"id": key(s.id), "en": s.text_en, "hu": s.text_hu} for s in m.segments[max(start - k, 0) : start] if s.text_hu
     ]
-    after = [{"id": s.id, "en": s.text_en} for s in m.segments[stop : stop + k]]
+    after = [{"id": key(s.id), "en": s.text_en} for s in m.segments[stop : stop + k]]
     pending = {i: m.segments[i] for i in range(start, stop)}
 
     for _ in range(3):
         todo = [
-            {"id": s.id, "speaker": s.speaker, "en": s.text_en, "max_syl": syllable_budget(m, i, cfg)}
+            {"id": key(s.id), "speaker": s.speaker, "en": s.text_en, "max_syl": syllable_budget(m, i, cfg)}
             for i, s in pending.items()
         ]
         user = (
@@ -94,15 +99,14 @@ def translate_batch(ctx: Context, start: int, stop: int) -> None:
             f"Previous segments (already translated, for context only):\n{json.dumps(before, ensure_ascii=False)}\n\n"
             f"Segments to translate:\n{json.dumps(todo, ensure_ascii=False)}\n\n"
             f"Following segments (context only, do not translate):\n{json.dumps(after, ensure_ascii=False)}\n\n"
-            'Return {"translations": [{"id": <id>, "text": "<Hungarian>"}]} with exactly one item per segment to translate.'
+            'Return a JSON object that maps the id of each segment to translate to its Hungarian text: '
+            '{"<id>": "<Hungarian>", ...}.'
         )
-        batch = ctx.llm.complete_json(system_prompt(cfg), user, Batch)
-        by_id = {s.id: i for i, s in pending.items()}
-        for item in batch.translations:
-            if item.id in by_id and item.text.strip():
-                idx = by_id[item.id]
-                pending.pop(idx).text_hu = item.text.strip()
-                by_id.pop(item.id)
+        schema = answer_schema([s.id for s in pending.values()])
+        got = answers(ctx.llm.complete_json(system_prompt(cfg), user, schema))
+        for i, s in list(pending.items()):
+            if s.id in got:
+                pending.pop(i).text_hu = got[s.id]
         if not pending:
             return
     raise StepError(f"Nem sikerült lefordítani ezeket a szegmenseket: {[s.id for s in pending.values()]}")
@@ -121,7 +125,7 @@ def shorten_batch(ctx: Context, requests: list[tuple[Segment, int]]) -> dict[int
         for _ in range(3):
             items = [
                 {
-                    "id": seg.id,
+                    "id": key(seg.id),
                     "speaker": seg.speaker,
                     "en": seg.text_en,
                     "hu": seg.text_hu,
@@ -135,13 +139,18 @@ def shorten_batch(ctx: Context, requests: list[tuple[Segment, int]]) -> dict[int
                 "These Hungarian dubbing lines are too long for their time slot. Rewrite each so it has at most "
                 "`max_syl` syllables while keeping the essential meaning and the speaking style.\n\n"
                 f"{json.dumps(items, ensure_ascii=False)}\n\n"
-                'Return {"translations": [{"id": <id>, "text": "<shorter Hungarian>"}]} with one item per line.'
+                'Return a JSON object that maps each id to the shorter Hungarian line: {"<id>": "<shorter Hungarian>", ...}.'
             )
-            batch = ctx.shortener.complete_json(system_prompt(ctx.cfg), user, Batch)
-            for item in batch.translations:
-                if item.id in pending and item.text.strip():
-                    result[item.id] = item.text.strip()
-                    pending.pop(item.id)
+            try:
+                batch = ctx.shortener.complete_json(system_prompt(ctx.cfg), user, answer_schema(list(pending)))
+            except LLMError:
+                if not result:
+                    raise
+                return result  # a korábbi kötegek rövidítései megmaradnak
+            for seg_id, text in answers(batch).items():
+                if seg_id in pending:
+                    result[seg_id] = text
+                    pending.pop(seg_id)
             if not pending:
                 break
     return result
@@ -170,3 +179,5 @@ def run(ctx: Context) -> None:
         ctx.console.print(f"  fordítás: {start + 1}–{stop} / {len(m.segments)}")
         translate_batch(ctx, start, stop)
         ctx.save()
+    if hasattr(ctx.llm, "stats"):
+        ctx.console.print(f"  LLM: {ctx.llm.stats()}")

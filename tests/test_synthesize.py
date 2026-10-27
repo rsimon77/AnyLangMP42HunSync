@@ -9,7 +9,7 @@ from mp4translator.context import Context
 from mp4translator.llm import LLMError
 from mp4translator.manifest import Manifest, Segment, Speaker
 from mp4translator.steps import synthesize
-from mp4translator.steps.translate import Batch, Item, shorten_batch, speaking_rate, syllable_budget
+from mp4translator.steps.translate import shorten_batch, speaking_rate, syllable_budget
 from mp4translator.steps.voices import clamp_rate, measure_rate
 from mp4translator.text import count_hu_syllables
 
@@ -53,7 +53,7 @@ class FakeLLM:
         self.log.append(("llm", user))
         if self.error:
             raise LLMError("nincs Ollama")
-        return Batch(translations=[Item(id=k, text=v) for k, v in self.answers.items()])
+        return schema.model_construct(**{f"s{k}": v for k, v in self.answers.items()})
 
     def unload(self):
         self.log.append(("unload",))
@@ -171,6 +171,46 @@ def test_fresh_run_regenerates_everything(make_ctx):
     assert sum(e[0] == "tts" for e in log) == 2
 
 
+def test_interrupted_fresh_run_does_not_keep_old_audio(make_ctx, monkeypatch):
+    build, log = make_ctx
+    ctx = build([SHORT, SHORT])
+    synthesize.run(ctx)
+    log.clear()
+    real = synthesize.synthesize_segment
+
+    def stop_after_first(ctx_, tts, index, can_shorten):
+        if index == 1:
+            raise KeyboardInterrupt
+        return real(ctx_, tts, index, can_shorten)
+
+    monkeypatch.setattr(synthesize, "synthesize_segment", stop_after_first)
+    with pytest.raises(KeyboardInterrupt):
+        synthesize.run(ctx)  # --from-step synthesize, a 2. szegmensnél megszakítva
+    monkeypatch.setattr(synthesize, "synthesize_segment", real)
+    log.clear()
+    ctx.resuming = True
+    synthesize.run(ctx)
+    assert sum(e[0] == "tts" for e in log) == 1  # a 2. szegmens régi hangja nem számít késznek
+
+
+def test_shorten_batch_keeps_earlier_chunks_on_error(make_ctx):
+    build, log = make_ctx
+    ctx = build([LONG, LONG])
+    ctx.cfg.translate_batch_size = 1
+    calls = []
+
+    class Flaky:
+        def complete_json(self, system, user, schema):
+            calls.append(user)
+            if len(calls) > 1:
+                raise LLMError("összeomlott")
+            return schema.model_construct(s0="Rövid.")
+
+    ctx.__dict__["shortener"] = Flaky()
+    segs = ctx.manifest.segments
+    assert shorten_batch(ctx, [(segs[0], 5), (segs[1], 5)]) == {0: "Rövid."}
+
+
 def test_shorten_target_scales_with_available_time():
     # 20 szótag 4 mp alatt, 2 mp hely → kb. 9-10 szótag
     text = "a" * 20
@@ -181,8 +221,10 @@ def test_shorten_target_scales_with_available_time():
 def test_shorten_batch_retries_missing_items(make_ctx):
     build, log = make_ctx
     ctx = build([LONG, LONG])
-    calls = iter([Batch(translations=[Item(id=0, text="Első.")]), Batch(translations=[Item(id=1, text="Második.")])])
-    ctx.__dict__["shortener"] = type("L", (), {"complete_json": lambda self, s, u, schema: next(calls)})()
+    calls = iter([{"s0": "Első."}, {"s1": "Második."}])
+    ctx.__dict__["shortener"] = type(
+        "L", (), {"complete_json": lambda self, s, u, schema: schema.model_construct(**next(calls))}
+    )()
     segs = ctx.manifest.segments
     assert shorten_batch(ctx, [(segs[0], 5), (segs[1], 5)]) == {0: "Első.", 1: "Második."}
 

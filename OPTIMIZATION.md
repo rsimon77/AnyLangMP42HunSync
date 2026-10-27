@@ -39,6 +39,25 @@ Teljes idő: **20 perc 18 mp** (a régi futás becsült 70–80 perce helyett). 
   - TTS-hívások 364 → 244, újrapróbált szegmensek 91 → 44.
   - Fenntartás: ez a futás már az első futásban rövidített szövegekből indult, ezért 15 rövidítés kellett 20 helyett. A javulás nagyobb része így is a kevesebb újrapróbálásból jön.
 
+## Kódátnézés és gyorsítás, 3 perces részleten (2026-10-27)
+
+Mérés a Barbie-videó első 3 percén (`work/clips/barbie3.mp4`), teljes futás az elejétől, hűvös gépről indítva.
+
+| Lépés | Előtte | Utána | Megjegyzés |
+|---|---|---|---|
+| separate | 23 mp | 22 mp | |
+| transcribe | 9 mp | 9 mp | utána a Whisper kikerül a memóriából |
+| sounds | 4 mp | 4 mp | a 16 kHz-es sávot olvassa, librosa-átmintavételezés nélkül |
+| voices | 47 mp | 31 mp | |
+| translate | 127 mp | 96 mp | tömörebb JSON-válasz |
+| synthesize | 154 mp | 168 mp | 9 rövidítés 5 helyett (ld. lent) |
+| align | 6 mp | 4 mp | párhuzamos ffmpeg (4 szál) |
+| **összesen** | **382 mp** | **344 mp** | **−10%** |
+
+- **A két futás bemenete nem volt azonos.** A Demucs véletlen időeltolással dolgozik, így a beszédsáv futásonként kicsit más. A második futásban a Whisper írásjelek nélkül írta át a szöveget, és 50 helyett 43 hosszabb szegmens lett. Emiatt a lépésenkénti számok zajosak. Javítva: a separate lépés rögzített véletlenmagot használ, két egymás utáni szétválasztás bitre azonos.
+- **Fordítás, azonos bemeneten mérve:** a válasz `{"s12": "…"}` alakú, nem `[{"id": 12, "text": "…"}]`. Ugyanarra a 20 szegmensre 464 helyett kb. 390 token (−16%), és a séma minden szegmensre kikényszeríti a választ. A fordítás ideje a kimenet hosszával arányos: a Gemma 3 12B hűvös gépen kb. 15, melegen 10 token/mp. Ez a fanless MacBook Air hőkorlátozása.
+- **Mérési buktató:** egy betöltve hagyott Ollama-modell (7 GB) az első próbálkozásnál swapolást okozott, és minden lépés 1,5–2,5-szer lassabb lett. Mérés előtt: `ollama ps` legyen üres, a hőállapot normál.
+
 ## Javaslatok, várható hatás szerint
 
 ### 1. Az LLM és az XTTS soha ne legyen egyszerre a memóriában (legnagyobb hatás)

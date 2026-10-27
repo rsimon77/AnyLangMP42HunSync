@@ -22,21 +22,30 @@ def dub(
     from_step: Annotated[
         Optional[str], typer.Option("--from-step", help=f"Újrafuttatás ettől a lépéstől: {', '.join(STEP_NAMES)}")
     ] = None,
-    llm: Annotated[Optional[str], typer.Option("--llm", help="pl. ollama:gemma3:12b")] = None,
+    llm: Annotated[Optional[str], typer.Option("--llm", help="Fordítómodell, pl. ollama:gemma3:12b (lásd: models)")] = None,
+    whisper: Annotated[Optional[str], typer.Option("--whisper", help="Whisper-modell (Hugging Face repó)")] = None,
+    demucs: Annotated[Optional[str], typer.Option("--demucs", help="Demucs-modell, pl. htdemucs_ft")] = None,
+    tts: Annotated[Optional[str], typer.Option("--tts", help="Hangmotor: xtts | edge")] = None,
     voice: Annotated[Optional[str], typer.Option("--voice", help="pl. hu-HU-NoemiNeural")] = None,
 ) -> None:
     """Lefuttatja a teljes szinkronfolyamatot (a már kész lépéseket átugorja)."""
     if from_step is not None and from_step not in STEP_NAMES:
         raise typer.BadParameter(f"Ismeretlen lépés: {from_step}. Lehetséges: {', '.join(STEP_NAMES)}")
-    cfg = Config.load(config)
-    if llm:
-        cfg.llm = llm
-    if voice:
-        cfg.edge_voice = voice
+    overrides = {"llm": llm, "whisper_model": whisper, "demucs_model": demucs, "tts": tts, "edge_voice": voice}
+    try:
+        cfg = Config.load(config).model_copy(update={k: v for k, v in overrides.items() if v})
+        cfg = Config.model_validate(cfg.model_dump())  # a kapcsolók értékeit is ellenőrizzük
+    except ValueError as e:
+        raise typer.BadParameter(str(e)) from e
     output = output or input.with_name(f"{input.stem}_hu.mp4")
     workdir = workdir or Path("work") / input.stem
 
-    resume = shlex.join(["uv", "run", "mp4translator", "dub", str(input), "-o", str(output), "--workdir", str(workdir)])
+    args = ["uv", "run", "mp4translator", "dub", str(input), "-o", str(output), "--workdir", str(workdir)]
+    if config != Path("config.yaml"):
+        args += ["-c", str(config)]
+    flags = {"--llm": llm, "--whisper": whisper, "--demucs": demucs, "--tts": tts, "--voice": voice}
+    args += [x for flag, v in flags.items() if v for x in (flag, v)]
+    resume = shlex.join(args)
     try:
         ctx = run_pipeline(input, output, cfg, workdir, from_step=from_step, console=console)
     except KeyboardInterrupt:
@@ -49,6 +58,24 @@ def dub(
         raise typer.Exit(1)
     console.print(f"\n[bold green]Kész:[/bold green] {output}")
     console.print(f"Riport: {ctx.workdir / 'report.md'}")
+
+
+@app.command()
+def models(
+    lang: Annotated[str, typer.Option("--lang", help="en | hu")] = "hu",
+) -> None:
+    """Az ajánlott modellek (fordító LLM, Whisper, Demucs, hangmotor) és a letöltött Ollama-modellek."""
+    from .models import describe_all
+    from .ollama import installed_models
+
+    typer.echo(describe_all(lang))
+    cfg = Config.load(Path("config.yaml"))
+    tags = installed_models(cfg.ollama_host)
+    if tags is None:
+        console.print("\nAz Ollama nem fut, a letöltött modellek nem kérdezhetők le.")
+    else:
+        console.print(f"\nLetöltött Ollama-modellek: {', '.join(tags) or '–'}")
+        console.print("Letöltés: ollama pull <modell>  (pl. ollama pull translategemma:12b)")
 
 
 def _workdirs(workdir: Path | None) -> list[Path]:

@@ -2,6 +2,7 @@
 
 import os
 import signal
+import subprocess
 from pathlib import Path
 
 LOCK_NAME = "run.pid"
@@ -18,7 +19,16 @@ def _alive(pid: int) -> bool:
         return False
     except PermissionError:
         return True
-    return True
+    return _is_ours(pid)
+
+
+def _is_ours(pid: int) -> bool:
+    """A PID tényleg egy mp4translator-futásé? (Egy elárvult zárfájl PID-jét a rendszer másnak is kiadhatja.)"""
+    try:
+        cmd = subprocess.run(["ps", "-o", "command=", "-p", str(pid)], capture_output=True, text=True, check=False)
+    except OSError:
+        return True  # nem tudjuk ellenőrizni: inkább futónak tekintjük
+    return "mp4translator" in cmd.stdout
 
 
 def running_pid(workdir: Path) -> int | None:
@@ -35,10 +45,21 @@ def running_pid(workdir: Path) -> int | None:
 
 
 def acquire(workdir: Path) -> None:
-    pid = running_pid(workdir)
-    if pid is not None and pid != os.getpid():
-        raise AlreadyRunning(f"Ezen a munkamappán már fut egy feldolgozás (PID {pid}): {workdir}")
-    (workdir / LOCK_NAME).write_text(str(os.getpid()))
+    lock = workdir / LOCK_NAME
+    for _ in range(2):
+        try:
+            fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)  # atomi: két egyszerre induló futásból egy nyer
+        except FileExistsError:
+            pid = running_pid(workdir)  # az elárvult zárfájlt eltávolítja
+            if pid == os.getpid():
+                return
+            if pid is not None:
+                raise AlreadyRunning(f"Ezen a munkamappán már fut egy feldolgozás (PID {pid}): {workdir}") from None
+            continue
+        with os.fdopen(fd, "w") as f:
+            f.write(str(os.getpid()))
+        return
+    raise AlreadyRunning(f"Nem sikerült zárolni a munkamappát: {workdir}")
 
 
 def release(workdir: Path) -> None:

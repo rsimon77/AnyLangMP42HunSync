@@ -68,7 +68,7 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
   - start, stop and resume it, or rerun from a chosen step;
   - follow the step progress and the live log;
   - start Ollama with one click if it is not running.
-- **Settings:** translation model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
+- **Settings:** translation model (recommended list; ✓ marks downloaded models, and a button downloads the selected one with progress), Whisper and Demucs model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
 - **Result:** watch the dubbed video (the browser plays the Hungarian track), download the MP4, the subtitle and the report, and read the report.
 - **Speakers:**
   - see each speaker's detected voice type and pitch;
@@ -92,7 +92,7 @@ Output:
 Useful options:
 
 - `--from-step <step>`: rerun from a step. Use it after editing `text_hu` or `speaker` in `work/video/manifest.json`, or after changing settings.
-- `--llm ollama:gemma3:4b`: a smaller, faster translation model.
+- `--llm`, `--whisper`, `--demucs`, `--tts`: choose the models for one run (see below).
 - `-c config.yaml`: settings, including:
   - formal or informal address;
   - glossary;
@@ -101,6 +101,21 @@ Useful options:
   - manual voice types (`speaker_kinds: {SPK2: child}`);
   - pitch correction (`pitch_correction: off | child | all`);
   - animal sound detection (`keep_animal_sounds`).
+
+### Choosing models
+
+`uv run mp4translator models` lists the recommended models and the Ollama models already downloaded. Set them in `config.yaml` (`llm`, `whisper_model`, `demucs_model`, `tts`), on the command line, or in the web UI.
+
+| Purpose | Recommended | Alternatives |
+|---|---|---|
+| Translation (Ollama) | `ollama:gemma3:12b` | `gemma3:4b` (fast), `translategemma:12b` / `:4b` (translation-tuned), `gemma4:12b`, `gemma4:e4b`, `qwen3:8b` (experimental) |
+| Speech recognition | `mlx-community/whisper-large-v3-turbo` | `-turbo-4bit` (smaller), `whisper-large-v3-mlx` (most accurate), `distil-whisper-large-v3` (English only), `whisper-small-mlx` |
+| Separation | `htdemucs` | `htdemucs_ft` (cleaner voice, ~4x slower), `mdx_extra` |
+| Voice | `xtts` | `edge` |
+
+- Download an Ollama model with `ollama pull <name>` or the download button in the web UI. Whisper and Demucs models download automatically on first use.
+- Models that "think" (qwen3, gemma4) get `think: false`, so they answer directly.
+- Only Gemma 3 12B has been tested for Hungarian quality; listen to the result before switching.
 
 ### Inspecting speakers
 

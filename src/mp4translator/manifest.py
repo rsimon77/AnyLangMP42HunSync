@@ -21,6 +21,11 @@ class Segment(BaseModel):
     synth_seconds: float | None = None  # a hanggenerálásra fordított idő (méréshez)
     tts_attempts: int | None = None  # TTS-hívások száma, újrapróbálásokkal együtt
 
+    @property
+    def speech_end(self) -> float:
+        """Meddig szól a magyar mondat az illesztés (gyorsítás) után; legalább az eredeti végéig."""
+        return max(self.end, self.start + (self.tts_duration or 0.0) / self.speed_factor)
+
 
 class Speaker(BaseModel):
     ref_audio: str | None = None  # a munkamappához képest

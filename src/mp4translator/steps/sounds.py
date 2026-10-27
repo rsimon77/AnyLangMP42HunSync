@@ -80,12 +80,17 @@ def run(ctx: Context) -> None:
         ctx.console.print("  kihagyva (csak leválasztott háttérrel értelmes)")
         return
 
-    import librosa
     import torch
     from transformers import ASTFeatureExtractor, ASTForAudioClassification
 
-    y, sr = read_mono(vocals)
-    y = librosa.resample(y, orig_sr=sr, target_sr=SR)
+    asr = ctx.path("asr_16k.wav")  # ugyanaz a leválasztott beszédsáv, már 16 kHz-en (a separate írja)
+    if asr.exists():
+        y, _ = read_mono(asr)
+    else:
+        import librosa
+
+        y, sr = read_mono(vocals)
+        y = librosa.resample(y, orig_sr=sr, target_sr=SR)
     wins = windows(speech_gaps([(s.start, s.end) for s in m.segments], y.size / SR))
     clips = [(a, b, y[int(a * SR) : int(b * SR)]) for a, b in wins]
     clips = [c for c in clips if c[2].size >= SR // 4 and float(np.sqrt(np.mean(c[2] ** 2))) > SILENCE_RMS]

@@ -68,7 +68,7 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
   - indítás, leállítás, folytatás vagy újrafuttatás egy választott lépéstől;
   - lépésenkénti haladás és élő napló;
   - ha az Ollama nem fut, egy gombbal elindítható.
-- **Beállítások:** fordítómodell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
+- **Beállítások:** fordítómodell (ajánlott lista; a ✓ a letöltött modelleket jelöli, egy gomb letölti a kiválasztottat, haladásjelzővel), Whisper- és Demucs-modell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
 - **Eredmény:** a szinkronizált videó lejátszása (a böngésző a magyar sávot játssza), az MP4, a felirat és a riport letöltése, a riport megjelenítése.
 - **Beszélők:**
   - beszélőnként a felismert hangtípus és az alaphang;
@@ -92,7 +92,7 @@ Kimenet:
 Hasznos kapcsolók:
 
 - `--from-step <lépés>`: újrafuttatás egy lépéstől. Például ha kézzel javítottad a `work/video/manifest.json` `text_hu` vagy `speaker` mezőit, vagy ha beállítást változtattál.
-- `--llm ollama:gemma3:4b`: kisebb, gyorsabb fordítómodell.
+- `--llm`, `--whisper`, `--demucs`, `--tts`: modellválasztás egy futásra (lásd lent).
 - `-c config.yaml`: beállítások, többek között:
   - tegezés vagy magázás;
   - glosszárium;
@@ -101,6 +101,21 @@ Hasznos kapcsolók:
   - kézi hangtípus (`speaker_kinds: {SPK2: child}`);
   - hangmagasság-korrekció (`pitch_correction: off | child | all`);
   - állathangok megtartása (`keep_animal_sounds`).
+
+### Modellválasztás
+
+Az `uv run mp4translator models` kiírja az ajánlott modelleket és a már letöltött Ollama-modelleket. A választás megadható a `config.yaml`-ban (`llm`, `whisper_model`, `demucs_model`, `tts`), parancssorban vagy a webes felületen.
+
+| Feladat | Ajánlott | Más lehetőségek |
+|---|---|---|
+| Fordítás (Ollama) | `ollama:gemma3:12b` | `gemma3:4b` (gyors), `translategemma:12b` / `:4b` (fordításra hangolt), `gemma4:12b`, `gemma4:e4b`, `qwen3:8b` (kísérleti) |
+| Beszédfelismerés | `mlx-community/whisper-large-v3-turbo` | `-turbo-4bit` (kisebb), `whisper-large-v3-mlx` (a legpontosabb), `distil-whisper-large-v3` (csak angol), `whisper-small-mlx` |
+| Szétválasztás | `htdemucs` | `htdemucs_ft` (tisztább beszéd, kb. 4x lassabb), `mdx_extra` |
+| Hang | `xtts` | `edge` |
+
+- Ollama-modell letöltése: `ollama pull <név>`, vagy a webes felület letöltés gombja. A Whisper- és a Demucs-modell az első használatkor magától letöltődik.
+- A „gondolkodó” modellek (qwen3, gemma4) `think: false` beállítást kapnak, így rögtön válaszolnak.
+- Magyar minőségre csak a Gemma 3 12B van kipróbálva; váltás előtt érdemes belehallgatni az eredménybe.
 
 ### Beszélők vizsgálata
 

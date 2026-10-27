@@ -14,9 +14,15 @@ def run(ctx: Context) -> None:
         ctx.console.print(f"  kihagyva (background: {ctx.cfg.background})")
         return
 
+    import random
+
     import demucs.api
     import torch
 
+    # A Demucs véletlen időeltolással dolgozik; rögzített maggal minden futás ugyanazt a beszédsávot adja,
+    # így az átírás (és a mérések) is megismételhetők.
+    random.seed(0)
+    torch.manual_seed(0)
     device = pick_device(ctx.cfg.torch_device)
     ctx.console.print(f"  Demucs modell: {ctx.cfg.demucs_model} ({device})")
     separator = demucs.api.Separator(model=ctx.cfg.demucs_model, device=device, progress=True)

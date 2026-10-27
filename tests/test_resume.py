@@ -43,10 +43,20 @@ def test_lock_acquire_and_release(tmp_path):
     assert runlock.running_pid(tmp_path) is None
 
 
-def test_lock_refuses_second_live_process(tmp_path):
-    (tmp_path / runlock.LOCK_NAME).write_text(str(os.getppid()))  # élő, de másik folyamat
+def test_lock_refuses_second_live_process(tmp_path, monkeypatch):
+    monkeypatch.setattr(runlock, "_is_ours", lambda pid: True)
+    (tmp_path / runlock.LOCK_NAME).write_text(str(os.getppid()))  # élő, de másik mp4translator-folyamat
     with pytest.raises(runlock.AlreadyRunning):
         runlock.acquire(tmp_path)
+
+
+def test_lock_with_reused_pid_is_stale(tmp_path):
+    # Az elárvult zárfájl PID-jét a rendszer egy másik programnak adta: nem futás, nem is szabad leállítani
+    (tmp_path / runlock.LOCK_NAME).write_text(str(os.getppid()))
+    assert runlock.running_pid(tmp_path) is None
+    assert runlock.request_stop(tmp_path) is None
+    runlock.acquire(tmp_path)
+    assert runlock.running_pid(tmp_path) == os.getpid()
 
 
 def test_stale_lock_is_cleaned_up(tmp_path):

@@ -6,6 +6,17 @@ from ..context import Context, StepError
 NAME = "extract"
 
 
+def media_duration(info: dict) -> float:
+    """A videó hossza; egyes konténereknél (mkv, webm) csak a sávoknál van megadva."""
+    candidates = [info.get("format", {}).get("duration")] + [s.get("duration") for s in info.get("streams", [])]
+    for value in candidates:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            continue
+    raise StepError("Nem sikerült megállapítani a videó hosszát.")
+
+
 def run(ctx: Context) -> None:
     info = probe(ctx.input_path)
     streams = info.get("streams", [])
@@ -14,7 +25,7 @@ def run(ctx: Context) -> None:
     if not any(s.get("codec_type") == "audio" for s in streams):
         raise StepError("A bemeneti fájlban nincs hangsáv.")
 
-    duration = float(info["format"]["duration"])
+    duration = media_duration(info)
     if duration > ctx.cfg.max_duration_s:
         raise StepError(
             f"A videó {duration / 60:.1f} perces, a megengedett maximum {ctx.cfg.max_duration_s / 60:.0f} perc."

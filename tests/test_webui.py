@@ -94,7 +94,8 @@ def test_command(ws, video):
         ws.command(job, "nope")
 
 
-def test_only_one_run_at_a_time(ws, video):
+def test_only_one_run_at_a_time(ws, video, monkeypatch):
+    monkeypatch.setattr(runlock, "_is_ours", lambda pid: True)
     job = ws.create(video)
     assert ws.running() is None
     (job.workdir / runlock.LOCK_NAME).write_text(str(os.getppid()))  # élő, másik folyamat

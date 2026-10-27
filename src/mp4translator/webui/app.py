@@ -3,9 +3,11 @@
 from pathlib import Path
 
 import gradio as gr
-import httpx
 import numpy as np
 
+from .. import runlock
+from ..models import DEMUCS, LLMS, WHISPERS, ModelChoice, ollama_tag
+from ..ollama import installed_models, is_installed, pull
 from ..pipeline import STEP_NAMES
 from ..steps.synthesize import is_synthesized
 from .i18n import LANGS, pick_lang, t
@@ -16,12 +18,25 @@ KINDS = ["auto", "male", "female", "child"]
 THRESHOLDS = [0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7]
 
 
-def ollama_models(host: str) -> list[str]:
-    try:
-        tags = httpx.get(f"{host.rstrip('/')}/api/tags", timeout=2).json().get("models", [])
-    except (httpx.HTTPError, ValueError):
-        return []
-    return [f"ollama:{m['name']}" for m in tags]
+def model_choices(catalog: list[ModelChoice], lang: str, current: str | None) -> list[tuple[str, str]]:
+    """Az ajánlott modellek (címke, érték) párjai; az aktuális, listán kívüli érték is választható marad."""
+    choices = [(m.title(lang), m.id) for m in catalog]
+    if current and current not in {m.id for m in catalog}:
+        choices.append((current, current))
+    return choices
+
+
+def llm_choices(lang: str, current: str | None, installed: list[str] | None) -> list[tuple[str, str]]:
+    """Az ajánlott fordítómodellek (✓ = már letöltve) és a többi letöltött Ollama-modell."""
+    have = installed or []
+    choices = [
+        (("✓ " if is_installed(ollama_tag(m.id), have) else "⬇ ") + m.title(lang), m.id) for m in LLMS
+    ]
+    known = {ollama_tag(m.id) for m in LLMS}
+    choices += [(f"✓ {tag}", f"ollama:{tag}") for tag in have if tag not in known]
+    if current and current not in {v for _, v in choices}:
+        choices.append((current, current))
+    return choices
 
 
 def build(ws: Workspace) -> gr.Blocks:
@@ -91,13 +106,21 @@ def build(ws: Workspace) -> gr.Blocks:
             with gr.Tab(t("en", "tab_settings")) as tab_settings:
                 tr(gr.Markdown(t("en", "settings_note")), "settings_note", "value")
                 with gr.Row():
-                    llm = tr(gr.Dropdown(label=t("en", "llm"), allow_custom_value=True), "llm")
-                    shorten_llm = tr(gr.Dropdown(label=t("en", "shorten_llm"), allow_custom_value=True), "shorten_llm")
+                    llm = tr(gr.Dropdown(label=t("en", "llm"), allow_custom_value=True, scale=2), "llm")
+                    shorten_llm = tr(
+                        gr.Dropdown(label=t("en", "shorten_llm"), allow_custom_value=True, scale=2), "shorten_llm"
+                    )
                     formality = tr_choices(
                         tr(gr.Radio(label=t("en", "formality"), choices=["tegezo", "magazo"]), "formality"),
                         "formality",
                         ["tegezo", "magazo"],
                     )
+                with gr.Row():
+                    pull_btn = tr(gr.Button(t("en", "pull"), size="sm"), "pull", "value")
+                    pull_md = gr.Markdown()
+                with gr.Row():
+                    whisper = tr(gr.Dropdown(label=t("en", "whisper_model"), allow_custom_value=True), "whisper_model")
+                    demucs = tr(gr.Dropdown(label=t("en", "demucs_model"), allow_custom_value=True), "demucs_model")
                 with gr.Row():
                     tts = tr_choices(
                         tr(gr.Radio(label=t("en", "tts"), choices=["xtts", "edge"]), "tts"), "tts", ["xtts", "edge"]
@@ -167,8 +190,6 @@ def build(ws: Workspace) -> gr.Blocks:
             )
             if job is None:
                 return (t(lang, "no_job"), "", "", gr.update(interactive=False), gr.update(interactive=False), *ollama)
-            from .. import runlock
-
             pid = runlock.running_pid(job.workdir)
             m = job.manifest()
             status = t(lang, "status_running", pid=pid) if pid else t(lang, "status_idle")
@@ -212,10 +233,11 @@ def build(ws: Workspace) -> gr.Blocks:
             job = job_of(name)
             if job is None:
                 raise gr.Error(t(lang, "no_job"))
-            busy = ws.running()
-            if busy is not None:
-                raise gr.Error(t(lang, "busy", name=busy.name))
-            ws.start(job, from_step)
+            try:
+                ws.start(job, from_step)  # zárolva ellenőrzi, hogy nem fut-e már valami
+            except RuntimeError:
+                busy = ws.running()
+                raise gr.Error(t(lang, "busy", name=busy.name if busy else "?"))
             gr.Info(t(lang, "started", name=job.name))
 
         def on_stop(name, lang):
@@ -250,13 +272,15 @@ def build(ws: Workspace) -> gr.Blocks:
 
         # --- beállítások ---
 
-        def load_settings(name):
+        def load_settings(name, lang):
             job = job_of(name)
             cfg = ws.job_config(job) if job else ws.job_config_default()
-            models = ollama_models(host)
+            installed = installed_models(host)
+            choices = llm_choices(lang, cfg.llm, installed)
             return (
-                gr.update(choices=models, value=cfg.llm),
-                gr.update(choices=[""] + models, value=cfg.shorten_llm or ""),
+                gr.update(choices=choices, value=cfg.llm),
+                gr.update(choices=[(t(lang, "same_model"), "")] + llm_choices(lang, cfg.shorten_llm, installed),
+                          value=cfg.shorten_llm or ""),
                 cfg.formality,
                 cfg.tts,
                 cfg.xtts_accept_license,
@@ -268,13 +292,15 @@ def build(ws: Workspace) -> gr.Blocks:
                 cfg.max_pitch_shift,
                 cfg.keep_animal_sounds,
                 [[en, hu] for en, hu in cfg.glossary.items()] or [["", ""]],
+                gr.update(choices=model_choices(WHISPERS, lang, cfg.whisper_model), value=cfg.whisper_model),
+                gr.update(choices=model_choices(DEMUCS, lang, cfg.demucs_model), value=cfg.demucs_model),
             )
 
         settings_fields = [llm, shorten_llm, formality, tts, license_cb, background, threshold, min_spk, max_speedup,
-                           pitch, max_pitch, animals, glossary]
+                           pitch, max_pitch, animals, glossary, whisper, demucs]
 
         def save_settings(name, lang, llm_v, shorten_v, formality_v, tts_v, license_v, background_v, threshold_v,
-                          min_spk_v, max_speedup_v, pitch_v, max_pitch_v, animals_v, glossary_v):
+                          min_spk_v, max_speedup_v, pitch_v, max_pitch_v, animals_v, glossary_v, whisper_v, demucs_v):
             job = job_of(name)
             if job is None:
                 raise gr.Error(t(lang, "no_job"))
@@ -293,12 +319,32 @@ def build(ws: Workspace) -> gr.Blocks:
                 "max_pitch_shift": float(max_pitch_v),
                 "keep_animal_sounds": bool(animals_v),
                 "glossary": {str(r[0]).strip(): str(r[1]).strip() for r in rows if r and str(r[0]).strip() and str(r[1]).strip()},
+                "whisper_model": whisper_v,
+                "demucs_model": demucs_v,
             }
             try:
                 ws.save_config(job, values)
             except Exception as e:  # pydantic validációs hiba
                 raise gr.Error(t(lang, "invalid", error=e))
             gr.Info(t(lang, "saved"))
+
+        def on_pull(llm_v, lang):
+            """Letölti a kiválasztott fordítómodellt az Ollamába, közben mutatja a haladást."""
+            if not llm_v or not llm_v.startswith("ollama:"):
+                raise gr.Error(t(lang, "pull_pick"))
+            tag = ollama_tag(llm_v)
+            installed = installed_models(host)
+            if installed is None:
+                raise gr.Error(t(lang, "ollama_down"))
+            if is_installed(tag, installed):
+                yield t(lang, "pull_have", model=tag)
+                return
+            try:
+                for status, frac in pull(host, tag):
+                    yield t(lang, "pull_progress", model=tag, status=status) + (f" – {frac:.0%}" if frac is not None else "")
+            except Exception as e:  # hálózati vagy Ollama-hiba
+                raise gr.Error(t(lang, "pull_failed", error=e))
+            yield t(lang, "pull_done", model=tag)
 
         # --- eredmény ---
 
@@ -394,7 +440,7 @@ def build(ws: Workspace) -> gr.Blocks:
         gr.Timer(2.0).tick(refresh, [job_dd, lang], status_outputs)
         upload.upload(on_upload, [upload, lang], job_dd)
         refresh_btn.click(lambda: gr.update(choices=job_names()), None, job_dd)
-        job_dd.change(refresh, [job_dd, lang], status_outputs).then(load_settings, job_dd, settings_fields).then(
+        job_dd.change(refresh, [job_dd, lang], status_outputs).then(load_settings, [job_dd, lang], settings_fields).then(
             load_result, [job_dd, lang], [video, downloads, report_md]
         ).then(load_speakers, [job_dd, lang], [speakers_df, speaker_dd])
         start_btn.click(run, [job_dd, lang]).then(refresh, [job_dd, lang], status_outputs)
@@ -406,7 +452,8 @@ def build(ws: Workspace) -> gr.Blocks:
         ollama_stop_btn.click(on_stop_ollama, lang).then(refresh, [job_dd, lang], status_outputs)
         ollama_restart_btn.click(on_restart_ollama, lang).then(refresh, [job_dd, lang], status_outputs)
         save_btn.click(save_settings, [job_dd, lang] + settings_fields)
-        tab_settings.select(load_settings, job_dd, settings_fields)
+        tab_settings.select(load_settings, [job_dd, lang], settings_fields)
+        pull_btn.click(on_pull, [llm, lang], pull_md).then(load_settings, [job_dd, lang], settings_fields)
         tab_result.select(load_result, [job_dd, lang], [video, downloads, report_md])
         tab_speakers.select(load_speakers, [job_dd, lang], [speakers_df, speaker_dd])
         speaker_dd.change(on_speaker, [job_dd, speaker_dd], [ref_audio, cal_audio, kind_radio])

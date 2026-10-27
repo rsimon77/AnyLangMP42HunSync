@@ -3,8 +3,29 @@
 ## Kész
 - MVP (Whisper + Gemma 3 12B + edge-tts), mintavideón tesztelve.
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
-- 67 egységteszt, mind átmegy.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
+
+## Modellválasztás és kódátnézés (2026-10-27)
+- Választható modellek: fordító LLM (ajánlott lista, `src/mp4translator/models.py`), Whisper, Demucs, hangmotor.
+  - Parancssorban: `--llm`, `--whisper`, `--demucs`, `--tts`; a `models` parancs listáz.
+  - Webes felületen: legördülő listák, és egy gomb letölti a kiválasztott Ollama-modellt, haladásjelzővel.
+  - A gondolkodó modellek (qwen3, gemma4) `think: false`-t kapnak.
+  - Csak a Gemma 3 12B van magyarra kipróbálva; a többi letöltése és meghallgatása még hátravan.
+- **Új hangmotor: nincs beépítve.** A kutatás szerint a két jelölt:
+  - OmniVoice (k2-fsa, magyart tud, sebességparamétere van, MPS-en fut, nem kereskedelmi licenc);
+  - F5-TTS magyar finomhangolás (Maxdorger29).
+  A csomagok telepítéséhez külön engedély kell, ezért ez kimaradt.
+- A kódátnézés javításai:
+  - XTTS: nem omlik össze, ha minden próbálkozás üres hangot ad;
+  - minden Ollama-hiba (500-as hiba, időtúllépés) `LLMError`, így a rövidítés helyett gyorsítás jön;
+  - megszakított `--from-step synthesize` után a folytatás nem keveri a régi és az új hangokat;
+  - a hangfájlok írása atomi;
+  - `run.pid`: atomi zárolás, és egy újrahasznosított PID-et nem tekint futásnak, nem is állítja le;
+  - webes felület: szálbiztos indítás, egy sérült munka nem viszi el a felületet, a napló végét olvassa;
+  - mkv/webm hossz, gyorsított beszéd vége közös helyen (`Segment.speech_end`);
+  - Whisper-memória felszabadítása, párhuzamos align;
+  - determinisztikus Demucs.
+- 146 teszt, mind átmegy.
 
 ## Webes felület (2026-10-27)
 - `uv run mp4translator ui`: Gradio, angol/magyar, a `127.0.0.1:7860`-on. A kód a `src/mp4translator/webui/` mappában van:

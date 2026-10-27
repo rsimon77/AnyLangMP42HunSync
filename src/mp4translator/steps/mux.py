@@ -70,8 +70,7 @@ def run(ctx: Context) -> None:
 
     if ctx.cfg.write_srt:
         entries = [
-            (s.start, max(s.end, s.start + (s.tts_duration or 0.0) / s.speed_factor), s.text_hu or "")
-            for s in ctx.manifest.segments
+            (s.start, s.speech_end, s.text_hu or "") for s in ctx.manifest.segments
         ]
         out.with_suffix(".hu.srt").write_text(to_srt(entries), encoding="utf-8")
     write_report(ctx)

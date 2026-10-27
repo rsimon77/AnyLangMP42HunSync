@@ -46,7 +46,7 @@ def run(ctx: Context) -> None:
         n = max(orig.shape[0], dub.size)
         orig = np.pad(orig, ((0, n - orig.shape[0]), (0, 0)))
         dub = np.pad(dub, (0, n - dub.size))
-        speech = [(s.start, max(s.end, s.start + (s.tts_duration or 0.0))) for s in ctx.manifest.segments]
+        speech = [(s.start, s.speech_end) for s in ctx.manifest.segments]
         env = duck_envelope(speech, n, sr, ctx.cfg.duck_db)
         mixed = orig * env[:, None] + dub[:, None]
     else:

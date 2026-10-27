@@ -60,7 +60,7 @@ def synthesize_segment(ctx: Context, tts: TTSEngine, index: int, can_shorten: bo
     attempts = tts.last_attempts
     fit = plan_fit(dur, seg.start, seg.end, next_start, cfg, can_shorten=can_shorten)
 
-    speed = fit.speed
+    speed, action = fit.speed, fit.action
     if fit.action != "shorten" and speed > cfg.resynth_min_speed and tts.supports_speed:
         # Nagyobb gyorsításnál a motor saját tempóváltása természetesebb, mint az utólagos nyújtás;
         # kis gyorsítást az align lépés nyújtással old meg (nem kell újra generálni).
@@ -68,6 +68,8 @@ def synthesize_segment(ctx: Context, tts: TTSEngine, index: int, can_shorten: bo
         attempts += tts.last_attempts
         refit = plan_fit(dur, seg.start, seg.end, next_start, cfg, can_shorten=False)
         speed = refit.speed if refit.speed > 1.001 else 1.0
+        if refit.action == "overflow":  # a motor tempóváltásával sem fér el
+            action = "overflow"
 
     seg.synth_seconds = round((seg.synth_seconds or 0.0) + time.monotonic() - t0, 2)
     seg.tts_attempts = (seg.tts_attempts or 0) + attempts
@@ -76,9 +78,9 @@ def synthesize_segment(ctx: Context, tts: TTSEngine, index: int, can_shorten: bo
         return fit, dur
 
     seg.tts_file = str(out.relative_to(ctx.workdir))
-    seg.tts_duration, seg.speed_factor, seg.action = round(dur, 3), round(speed, 4), fit.action
+    seg.tts_duration, seg.speed_factor, seg.action = round(dur, 3), round(speed, 4), action
     seg.tts_text, seg.tts_speaker = seg.text_hu, seg.speaker
-    if fit.action == "overflow":
+    if action == "overflow":
         seg.note = "Maximális gyorsítással sem fér el, belelóg a következő szegmensbe."
     return fit, dur
 
@@ -92,8 +94,12 @@ def run(ctx: Context) -> None:
     if ctx.resuming:
         todo = [i for i, s in enumerate(m.segments) if not is_synthesized(s, ctx.workdir)]
     else:
-        # Új futás (pl. --from-step synthesize): minden szegmens hangja újra készül.
+        # Új futás (pl. --from-step synthesize): minden szegmens hangja újra készül. A régi állapotot
+        # azonnal töröljük, hogy egy megszakítás utáni folytatás ne keverje a régi és az új hangokat.
         todo = list(range(total))
+        for seg in m.segments:
+            seg.action, seg.tts_text = None, None
+        ctx.save()
     if not todo:
         ctx.console.print("  minden szegmens kész")
         return

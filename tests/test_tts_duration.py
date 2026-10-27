@@ -64,3 +64,13 @@ def test_measured_rate_avoids_needless_retries(tmp_path):
     assert engine.last_attempts == 1
     engine.set_rate("SPK0", None)
     assert engine.rates == {}
+
+
+def test_silent_attempts_do_not_crash(tmp_path):
+    import numpy as np
+
+    engine = _fake_xtts(6.0)
+    engine._generate = lambda text, speaker, speed: np.zeros(0, dtype=np.float32)  # mindig üres hang
+    assert engine.synthesize(LONG_TEXT, "SPK0", tmp_path / "a.wav") == 0.0
+    assert engine.last_attempts == 3
+    assert (tmp_path / "a.wav").exists() and not (tmp_path / "a.part.wav").exists()
