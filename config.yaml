@@ -35,6 +35,14 @@ speaker_threshold: 0.45        # nagyobb érték → kevesebb, összevontabb bes
 min_speaker_seconds: 10.0      # hangolás: uv run mp4translator speakers --workdir work/<videó>
 ref_audio_seconds: 12.0
 
+# Hangtípus (male | female | child) az alaphang alapján; kézi felülírás pl.: speaker_kinds: {SPK2: child}
+speaker_kinds: {}
+pitch_correction: child        # off | child | all – a klónozott hang hangmagasságának igazítása az eredetihez
+max_pitch_shift: 7.0           # félhang
+
+# Állathangok megtartása a beszédszünetekből (AST hangesemény-felismerés)
+keep_animal_sounds: true
+
 # Időzítés-illesztés
 gap_borrow_ratio: 0.8          # a következő szünet ekkora része használható fel
 soft_speedup: 1.15             # eddig gyorsítunk rövidítés nélkül

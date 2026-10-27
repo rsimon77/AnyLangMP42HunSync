@@ -27,18 +27,16 @@ uv run mp4translator dub "/Users/roberto/Downloads/Barbie Family Story - Chelsea
 
 ## Későbbi teendők
 
-### Hangtípus felismerése: női / férfi / gyerek / állat (felvéve: 2026-10-27)
-Cél: minden beszélő a jellegének megfelelő magyar hangot kapja, az állathangok pedig ne vesszenek el.
-
-- **Felismerés beszélőnként** (a voices lépésben, a hangmintából):
-  - nem és korcsoport osztályozása (férfi / női / gyerek), pl. az alapfrekvencia (F0) és egy kis, ingyenes kor- és nem-osztályozó modell alapján;
-  - címke a manifestben: `Speaker.kind`, kézzel felülírható.
-- **Állathangok** (ugatás, nyávogás stb.): ezek nem beszédek, nem kell fordítani, de meg kell őrizni őket.
-  - Kockázat: a Demucs a „vocals” sávba teheti őket, a Whisper viszont nem írja át → most kimaradhatnak a kész hangsávból.
-  - Megoldás: hangesemény-felismerés (pl. YAMNet/PANNs vagy AST, AudioSet-címkékkel). Az állathangnak jelölt részeket a beszédsávból vissza kell keverni a háttérbe, változatlanul.
-  - Ha egy állatszereplő beszél (mesefigura), az beszédként fut, a saját klónozott hangjával.
-- **Szinkron a típus szerint:**
-  - XTTS: a klónozás eleve átviszi a hangszínt, de a referencia-minta legyen tiszta. Gyerekhangnál ellenőrizni kell, hogy a klón nem lesz-e felnőttes. Ha igen, tartalék megoldás: magasabb hangfekvésű hangminta vagy enyhe hangmagasság-eltolás.
-  - edge-tts: a típus alapján választ hangot (férfi: Tamás, női/gyerek: Noémi + magasabb hangmagasság).
-  - A fordítási prompt is kapja meg a beszélő típusát (pl. gyerekhez egyszerűbb, gyerekesebb fogalmazás).
-- **Ellenőrzés:** a riportban beszélőnként a felismert típus, a `speakers` parancs kiírja a típust is.
+### Hangtípus felismerése: női / férfi / gyerek / állat – megvalósítva (2026-10-27)
+- **Hangtípus beszélőnként** (`voices` lépés): az alaphang mediánja alapján (`male_max_f0` 165 Hz, `child_min_f0` 300 Hz).
+  - Az AST AudioSet „férfi/női/gyerek beszéd” címkéi rajzfilmhangokon semmitmondóak voltak, ezért nem azokat használjuk.
+  - Kézi felülírás: `speaker_kinds: {SPK2: child}` a config.yaml-ban.
+- **Hangmagasság-korrekció:** a klónozott hang alaphangját a próbamondatokon méri.
+  - Gyerekhangnál (`pitch_correction: child`) az align lépés feljebb tolja, legfeljebb 7 félhanggal.
+  - Barbie: SPK1 262 → 364 Hz (eredeti 408), SPK2 392 → 488 Hz (eredeti 464).
+- **Állathangok** (`sounds` lépés): AST hangesemény-felismerés csak a beszédszünetekben, mert a beszéd alatt a magas hangokat tévesen „nyávogásnak” nézte. A találatok a mix lépésben változatlanul visszakerülnek. A Barbie-videóban nincs valódi állathang (0 találat), ezért valódi állathangos videón még nincs kipróbálva.
+- **Fordítás:** a prompt megkapja a beszélők típusát (pl. „SPK1: child”), a gyerekek egyszerűbben beszélnek.
+- **edge-tts:** hangválasztás típus szerint (férfi: Tamás, női: Noémi, gyerek: Noémi +25 Hz).
+- **Riport és `status`:** beszélőnként a típus, az alaphang, a klón alaphangja és a korrekció.
+- Barbie-futás a `sounds` lépéstől: 16 perc 48 mp. A felismerés: SPK0 és SPK4 női, SPK1–SPK3 gyerek. **Meghallgatásra vár:** a +6–7 félhangos eltolás lehet kissé „mókusos”.
+- Nyitott: a felnőtt női klónok is kb. 3,5 félhanggal mélyebbek az eredetinél (SPK0: 284 → 229 Hz). `pitch_correction: all` mellett ezek is korrigálódnának.
