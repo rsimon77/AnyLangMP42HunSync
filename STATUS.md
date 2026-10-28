@@ -19,7 +19,16 @@
   - Sebesség MPS-en: az OmniVoice kb. 9–10 mp mondatonként 32 lépéssel (8 lépéssel 2,7 mp); az XTTS 1–3,6 mp. A kötegelt generálás nem gyorsít.
   - Előnyei: a gyerekhang magassága közelebb marad az eredetihez, és a `duration` paraméterrel pontos hosszra generál (3,0 mp kérve → 3,1–3,2 mp lett).
   - Meghallgatható: `work/omnivoice_test/xtts_vs_omnivoice.wav` (felváltva XTTS, majd OmniVoice).
-  - A következő jelölt a magyarra finomhangolt F5-TTS (Maxdorger29/f5-tts-hungarian, kb. 270 óra magyar beszéd).
+- **A magyar F5-TTS (Maxdorger29/f5-tts-hungarian) is kipróbálva, nem lett beépítve** (2026-10-28).
+  - Ugyanaz a két hangminta, 6 magyar mondat, MPS. Érthetőség (a Whisper magyar átiratának szóegyezése), gyerek / női hang:
+    - XTTS: 0,78 / 0,84, kb. 2–3 mp mondatonként;
+    - F5, 16 lépés, rövid (6–7 mp-es) minta: 0,77 / 0,81, kb. 10 mp;
+    - F5, 32 lépés, rövid minta: 0,77 / 0,78, kb. 21 mp;
+    - F5, 16 lépés, teljes (11–13 mp-es) minta: 0,73 / 0,78, kb. 21 mp.
+  - A hangmagasság sem jobb: a gyerekhang (eredeti 302 Hz) az F5-nél 220 Hz, az XTTS-nél 235 Hz. A női hangot (289 Hz) az F5 jobban tartja: 299 Hz, az XTTS 238 Hz.
+  - Az f5-tts csomag a projekt környezetében visszaléptetné a huggingface-hub csomagot (2.3 → 1.33). A teszt ezért külön virtuális környezetben futott.
+  - Összegzés: azonos érthetőség 3–5-ször lassabban, egy 9 perces videónál kb. +20–25 perc hanggenerálás. Az XTTS marad.
+  - Meghallgatható: `work/f5_test/xtts_vs_f5.wav` (mondatonként XTTS, majd F5).
 - A kódátnézés javításai:
   - XTTS: nem omlik össze, ha minden próbálkozás üres hangot ad;
   - minden Ollama-hiba (500-as hiba, időtúllépés) `LLMError`, így a rövidítés helyett gyorsítás jön;
