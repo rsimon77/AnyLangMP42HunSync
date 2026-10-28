@@ -33,7 +33,7 @@ def test_pick_lang():
     assert pick_lang("hu-HU,hu;q=0.9,en;q=0.8") == "hu"
     assert pick_lang("de-DE,en;q=0.5,hu;q=0.4") == "en"
     assert pick_lang(None) == "en"
-    assert t("hu", "created", name="x") == "Új munka létrehozva: x"
+    assert t("hu", "created", name="x") == "Új projekt létrehozva: x"
 
 
 def test_slugify_and_unique_name():
@@ -174,3 +174,42 @@ def test_restart_ollama(monkeypatch, tmp_path):
     monkeypatch.setattr(jobs_mod, "ollama_ok", lambda host: True)
     assert jobs_mod.restart_ollama(tmp_path, "http://x")
     assert calls == ["stop", "start"]
+
+
+def _finished(ws, video):
+    job = ws.create(video)
+    for f in ("dub_mix_raw.wav", "audio.wav"):
+        (job.workdir / f).write_bytes(b"x" * 100)
+    job.output.parent.mkdir(parents=True, exist_ok=True)
+    job.output.write_bytes(b"video")
+    job.output.with_suffix(".hu.srt").write_text("1")
+    return job
+
+
+def test_delete_project_keeps_output_unless_asked(ws, video):
+    job = _finished(ws, video)
+    removed = ws.delete(job)
+    assert removed == [job.workdir] and not job.workdir.exists() and job.output.exists()
+    job2 = _finished(ws, video)
+    ws.delete(job2, with_output=True)
+    assert not job2.output.exists() and not job2.output.with_suffix(".hu.srt").exists()
+    assert ws.jobs() == []
+
+
+def test_delete_refuses_running_project_and_foreign_folders(ws, video, monkeypatch):
+    job = _finished(ws, video)
+    monkeypatch.setattr(runlock, "_is_ours", lambda pid: True)
+    (job.workdir / runlock.LOCK_NAME).write_text(str(os.getppid()))
+    with pytest.raises(RuntimeError):
+        ws.delete(job)
+    assert job.workdir.exists()
+    outside = jobs_mod.Job("x", ws.root / "elsewhere", job.source, job.output)
+    with pytest.raises(ValueError):
+        ws.delete(outside)
+
+
+def test_cleanup_job_frees_only_that_project(ws, video):
+    a, b = _finished(ws, video), _finished(ws, video)
+    assert ws.cleanup_job(a) == 100
+    assert not (a.workdir / "dub_mix_raw.wav").exists() and (a.workdir / "audio.wav").exists()
+    assert (b.workdir / "dub_mix_raw.wav").exists()

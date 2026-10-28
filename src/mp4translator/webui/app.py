@@ -88,11 +88,27 @@ def build(ws: Workspace) -> gr.Blocks:
         with gr.Tabs():
             # --- 1. Szinkron ---
             with gr.Tab(t("en", "tab_jobs")) as tab_jobs:
-                with gr.Row():
+                # projektkezelő: betöltés (választás), új projekt, törlés
+                with gr.Row(equal_height=True):
+                    job_dd = tr(gr.Dropdown(choices=job_names(), label=t("en", "job"), interactive=True, scale=3), "job")
+                    new_btn = tr(gr.Button(t("en", "proj_new"), variant="primary", scale=1), "proj_new", "value")
+                    delete_btn = tr(gr.Button(t("en", "proj_delete"), variant="stop", scale=1), "proj_delete", "value")
+                    refresh_btn = tr(gr.Button(t("en", "refresh"), scale=1), "refresh", "value")
+                with gr.Group(visible=False) as save_box:  # új projekt előtt: mi legyen a jelenlegivel?
+                    save_md = gr.Markdown()
+                    with gr.Row():
+                        save_yes_btn = tr(gr.Button(t("en", "proj_save_yes"), variant="primary"), "proj_save_yes", "value")
+                        save_no_btn = tr(gr.Button(t("en", "proj_save_no"), variant="stop"), "proj_save_no", "value")
+                        save_cancel_btn = tr(gr.Button(t("en", "proj_cancel")), "proj_cancel", "value")
+                with gr.Group(visible=not job_names()) as upload_box:
                     upload = tr(gr.File(label=t("en", "upload"), file_types=["video"], type="filepath"), "upload")
-                    with gr.Column():
-                        job_dd = tr(gr.Dropdown(choices=job_names(), label=t("en", "job"), interactive=True), "job")
-                        refresh_btn = tr(gr.Button(t("en", "refresh"), size="sm"), "refresh", "value")
+                with gr.Group(visible=False) as delete_box:
+                    delete_md = gr.Markdown()
+                    delete_output_cb = tr(gr.Checkbox(label=t("en", "proj_delete_output")), "proj_delete_output")
+                    with gr.Row():
+                        delete_yes_btn = tr(gr.Button(t("en", "proj_delete_yes"), variant="stop"), "proj_delete_yes",
+                                            "value")
+                        delete_cancel_btn = tr(gr.Button(t("en", "proj_cancel")), "proj_cancel", "value")
                 with gr.Row():
                     start_btn = tr(gr.Button(t("en", "start"), variant="primary"), "start", "value")
                     stop_btn = tr(gr.Button(t("en", "stop"), variant="stop"), "stop", "value")
@@ -276,7 +292,58 @@ def build(ws: Workspace) -> gr.Blocks:
             except ValueError as e:
                 raise gr.Error(str(e))
             gr.Info(t(lang, "created", name=job.name))
-            return gr.update(choices=job_names(), value=job.name)
+            return gr.update(choices=job_names(), value=job.name), gr.update(visible=False), None
+
+        # --- projektkezelő ---
+
+        hidden = gr.update(visible=False)
+        shown = gr.update(visible=True)
+
+        def on_new(name, lang):
+            """Új projekt: ha van betöltött projekt, előbb megkérdezi, mi legyen vele; különben jöhet a feltöltés."""
+            if job_of(name) is None:
+                return hidden, "", shown, hidden
+            return shown, t(lang, "proj_save_q", name=name), hidden, hidden
+
+        def on_save_yes(name, lang):
+            job = job_of(name)
+            freed = ws.cleanup_job(job) if job else 0
+            gr.Info(t(lang, "proj_saved", name=name, size=human(freed)))
+            return hidden, shown
+
+        def on_save_no(name, lang):
+            job = job_of(name)
+            if job is not None:
+                try:
+                    ws.delete(job)
+                except (RuntimeError, ValueError) as e:
+                    raise gr.Error(t(lang, "proj_busy", name=name) if isinstance(e, RuntimeError) else str(e))
+                gr.Info(t(lang, "proj_deleted", name=name))
+            return hidden, shown, gr.update(choices=job_names(), value=None)
+
+        def on_delete(name, lang):
+            job = job_of(name)
+            if job is None:
+                raise gr.Error(t(lang, "no_job"))
+            busy = ws.running()
+            if busy is not None and busy.name == job.name:
+                raise gr.Error(t(lang, "proj_busy", name=name))
+            out = job.output.name if job.output.exists() else "–"
+            return shown, t(lang, "proj_delete_q", name=name, output=out), False, hidden, hidden
+
+        def on_delete_yes(name, lang, with_output):
+            job = job_of(name)
+            if job is None:
+                raise gr.Error(t(lang, "no_job"))
+            try:
+                ws.delete(job, bool(with_output))
+            except RuntimeError:
+                raise gr.Error(t(lang, "proj_busy", name=name))
+            except ValueError as e:
+                raise gr.Error(str(e))
+            gr.Info(t(lang, "proj_deleted", name=name))
+            names = job_names()
+            return hidden, gr.update(choices=names, value=names[0] if names else None), gr.update(visible=not names)
 
         def run(name, lang, from_step=None):
             job = job_of(name)
@@ -641,16 +708,23 @@ def build(ws: Workspace) -> gr.Blocks:
         def init(request: gr.Request):
             code = pick_lang(request.headers.get("accept-language") if request else None)
             names = job_names()
-            return code, gr.update(choices=names, value=names[0] if names else None)
+            return code, gr.update(choices=names, value=names[0] if names else None), gr.update(visible=not names)
 
         # --- események ---
 
-        demo.load(init, None, [lang_radio, job_dd])
+        demo.load(init, None, [lang_radio, job_dd, upload_box])
         lang_radio.change(relabel, lang_radio, [lang] + [c for c, _ in i18n_targets]).then(
             refresh, [job_dd, lang], status_outputs
         )
         gr.Timer(2.0).tick(refresh, [job_dd, lang], status_outputs)
-        upload.upload(on_upload, [upload, lang], job_dd)
+        upload.upload(on_upload, [upload, lang], [job_dd, upload_box, upload])
+        new_btn.click(on_new, [job_dd, lang], [save_box, save_md, upload_box, delete_box])
+        save_yes_btn.click(on_save_yes, [job_dd, lang], [save_box, upload_box])
+        save_no_btn.click(on_save_no, [job_dd, lang], [save_box, upload_box, job_dd])
+        save_cancel_btn.click(lambda: (hidden, hidden), None, [save_box, upload_box])
+        delete_btn.click(on_delete, [job_dd, lang], [delete_box, delete_md, delete_output_cb, save_box, upload_box])
+        delete_yes_btn.click(on_delete_yes, [job_dd, lang, delete_output_cb], [delete_box, job_dd, upload_box])
+        delete_cancel_btn.click(lambda: hidden, None, delete_box)
         refresh_btn.click(lambda: gr.update(choices=job_names()), None, job_dd)
         job_dd.change(refresh, [job_dd, lang], status_outputs).then(load_settings, [job_dd, lang], settings_fields).then(
             load_result, [job_dd, lang], [video, downloads, report_md]

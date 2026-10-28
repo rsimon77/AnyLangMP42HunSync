@@ -64,12 +64,15 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
 ```
 
 - **Dubbing:**
-  - upload a video, which creates a job in `work/<name>/`;
+  - **projects**: each video is a project in `work/<name>/`.
+    - **Load** one from the list.
+    - **New project** first asks whether to keep the current one. Yes keeps it and cleans up its unneeded files; No deletes its folder (a finished video in `output/` stays). Then upload the new video.
+    - **Delete project** asks for confirmation. It removes the project folder, and the finished video and subtitles too if you tick that box. A running project cannot be deleted.
   - start, stop and resume it, or rerun from a chosen step;
   - follow the step progress and the live log;
   - start Ollama with one click if it is not running;
   - **clean up the workspace**: first lists what would be deleted and how much space it frees, then deletes on request (see below).
-- **Settings:** translation model (recommended list; ✓ marks downloaded models, and a button downloads the selected one with progress), Whisper and Demucs model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
+- **Settings:** translation model (recommended list; ✓ marks downloaded models, and a button downloads the selected one with progress), Whisper and Demucs model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per project to `work/<name>/config.yaml`.
 - **Result:** watch the dubbed video (the browser plays the Hungarian track), download the MP4, the subtitle and the report, and read the report.
 - **Lines:** a table of every line (time, speaker, English, Hungarian, status).
   - Click a line to hear the original and the Hungarian audio, then fix the Hungarian text or the speaker. A line can also be regenerated with the same text when the voice got it wrong.
@@ -81,10 +84,10 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
   - see each speaker's detected voice type and pitch;
   - listen to the original sample and the cloned voice;
   - override the voice type and rerun from the voices step;
-  - set the pitch of a speaker's cloned voice in semitones (with a preview), or go back to the automatic correction. This only remixes the video (about 10 seconds), no voice is regenerated, and the value is kept in the job's `config.yaml` (`speaker_pitch`);
+  - set the pitch of a speaker's cloned voice in semitones (with a preview), or go back to the automatic correction. This only remixes the video (about 10 seconds), no voice is regenerated, and the value is kept in the project's `config.yaml` (`speaker_pitch`);
   - preview the speaker count per clustering threshold.
 
-The language follows the browser and can be switched at the top right. Only one job runs at a time; this keeps 16 GB of RAM enough. A job keeps running in the background even if the UI is closed, and the UI picks it up again when restarted. Jobs started from the command line also appear in the UI.
+The language follows the browser and can be switched at the top right. Only one project runs at a time; this keeps 16 GB of RAM enough. A run keeps going in the background even if the UI is closed, and the UI picks it up again when restarted. Videos dubbed from the command line also appear in the UI as projects.
 
 ## Usage
 
@@ -157,8 +160,8 @@ uv run mp4translator cleanup --yes    # deletes it
   - voice files no longer referenced, and outdated fitted voice files;
   - samples of old speaker groups;
   - `audio_16k.wav` when the cleaner `asr_16k.wav` exists.
-- Every job stays editable and resumable. A running job is skipped.
-- `--extra` also deletes folders and logs in `work/` that belong to no job, and old manifest copies. A job's source video is never deleted, even when it sits in such a folder.
+- Every project stays editable and resumable. A running project is skipped.
+- `--extra` also deletes folders and logs in `work/` that belong to no project, and old manifest copies. A project's source video is never deleted, even when it sits in such a folder.
 - The web UI has the same feature on the Dubbing tab.
 
 ## iCloud

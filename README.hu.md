@@ -64,12 +64,15 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
 ```
 
 - **Szinkron:**
-  - videó feltöltése, ez új munkát hoz létre a `work/<név>/` mappában;
+  - **projektek**: minden videó egy projekt a `work/<név>/` mappában.
+    - **Betöltés**: a listából választható.
+    - **Új projekt**: előbb megkérdezi, megmaradjon-e a jelenlegi. Igen: megmarad, és a felesleges fájljai törlődnek. Nem: a mappája törlődik (az `output/` mappába már elkészült videó megmarad). Utána jöhet az új videó feltöltése.
+    - **Projekt törlése**: megerősítést kér. Törli a projekt mappáját, és ha bejelölöd, a kész videót és a feliratot is. Futó projekt nem törölhető.
   - indítás, leállítás, folytatás vagy újrafuttatás egy választott lépéstől;
   - lépésenkénti haladás és élő napló;
   - ha az Ollama nem fut, egy gombbal elindítható;
   - **munkaterület takarítása**: előbb kilistázza, mit törölne és mennyi hely szabadulna fel, kérésre töröl (lásd lent).
-- **Beállítások:** fordítómodell (ajánlott lista; a ✓ a letöltött modelleket jelöli, egy gomb letölti a kiválasztottat, haladásjelzővel), Whisper- és Demucs-modell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
+- **Beállítások:** fordítómodell (ajánlott lista; a ✓ a letöltött modelleket jelöli, egy gomb letölti a kiválasztottat, haladásjelzővel), Whisper- és Demucs-modell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Projektenként a `work/<név>/config.yaml` fájlba mentődnek.
 - **Eredmény:** a szinkronizált videó lejátszása (a böngésző a magyar sávot játssza), az MP4, a felirat és a riport letöltése, a riport megjelenítése.
 - **Mondatok:** az összes mondat táblázatban (idő, beszélő, angol, magyar, állapot).
   - Egy mondatra kattintva meghallgatható az eredeti és a magyar hang, és javítható a magyar szöveg vagy a beszélő. A mondat ugyanazzal a szöveggel is újragenerálható, ha a hang elrontotta.
@@ -81,10 +84,10 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
   - beszélőnként a felismert hangtípus és az alaphang;
   - meghallgatható az eredeti hangminta és a klónozott hang;
   - a hangtípus kézzel átállítható, utána újrafuttatás a voices lépéstől;
-  - a klónozott hang hangmagassága félhangban állítható (előnézettel), vagy visszaállítható az automatikus korrekcióra. Ez csak újrakeveri a videót (kb. 10 mp), új hangot nem generál, és az érték a munka `config.yaml`-jába is bekerül (`speaker_pitch`);
+  - a klónozott hang hangmagassága félhangban állítható (előnézettel), vagy visszaállítható az automatikus korrekcióra. Ez csak újrakeveri a videót (kb. 10 mp), új hangot nem generál, és az érték a projekt `config.yaml`-jába is bekerül (`speaker_pitch`);
   - előnézet arról, hány beszélő jön ki az egyes küszöbértékekkel.
 
-A nyelv a böngészőt követi, a jobb felső sarokban átváltható. Egyszerre egy munka fut, így elég a 16 GB memória. A futás akkor is folytatódik a háttérben, ha a felületet bezárod; újraindítás után a felület újra megtalálja. A parancssorból indított munkák is megjelennek a felületen.
+A nyelv a böngészőt követi, a jobb felső sarokban átváltható. Egyszerre egy projekt fut, így elég a 16 GB memória. A futás akkor is folytatódik a háttérben, ha a felületet bezárod; újraindítás után a felület újra megtalálja. A parancssorból szinkronizált videók is megjelennek a felületen, projektként.
 
 ## Használat
 
@@ -157,8 +160,8 @@ uv run mp4translator cleanup --yes    # törli
   - már nem használt hangfájlok és elavult illesztett hangfájlok;
   - régi beszélőcsoportok hangmintái;
   - az `audio_16k.wav`, ha megvan a tisztább `asr_16k.wav`.
-- Minden munka szerkeszthető és folytatható marad. A futó munkát kihagyja.
-- Az `--extra` a `work/` alatti, munkához nem tartozó mappákat és naplókat, valamint a régi manifest-másolatokat is törli. Egy munka forrásvideóját akkor sem törli, ha ilyen mappában van.
+- Minden projekt szerkeszthető és folytatható marad. A futó projektet kihagyja.
+- Az `--extra` a `work/` alatti, projekthez nem tartozó mappákat és naplókat, valamint a régi manifest-másolatokat is törli. Egy projekt forrásvideóját akkor sem törli, ha ilyen mappában van.
 - A webes felületen ugyanez a Szinkron fülön érhető el.
 
 ## iCloud

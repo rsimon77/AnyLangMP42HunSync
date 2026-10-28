@@ -5,6 +5,15 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Projektkezelés (2026-10-28)
+- A felületen a „Munka” helyett „Projekt” (angolul „Project”) szerepel.
+- A projektkezelő a Szinkron fül tetején van:
+  - **betöltés**: a legördülő listából;
+  - **új projekt**: rákérdez, megmaradjon-e a jelenlegi. Igen: megmarad, és lefut rajta az alap takarítás. Nem: a mappája törlődik, a kész videó marad. Utána jön a feltöltés;
+  - **törlés**: megerősítéssel, opcionálisan a kész videóval és felirattal együtt. Futó projekt nem törölhető, és a munkaterületen kívüli mappa sem.
+- A böngészőben két eldobható tesztprojekten kipróbálva: mentés takarítással, eldobás, törlés megerősítéssel. A valódi projektek érintetlenek maradtak.
+- 178 teszt, mind átmegy.
+
 ## Munkaterület takarítása (2026-10-28)
 - `mp4translator cleanup [--extra] [--yes]`, illetve a webes felületen a Szinkron fül „Munkaterület takarítása” része. A logika a `src/mp4translator/cleanup.py`-ban van.
 - Alapból csak a sehol nem használt fájlokat törli; a munkák szerkeszthetők és folytathatók maradnak.

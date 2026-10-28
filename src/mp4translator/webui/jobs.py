@@ -203,6 +203,35 @@ class Workspace:
         with self._lock:
             return remove(self.cleanup_plan(extra))
 
+    def cleanup_job(self, job: Job) -> int:
+        """Egyetlen projekt felesleges fájljai (pl. mentéskor, új projekt előtt); a felszabadított bájtok."""
+        from ..cleanup import job_garbage, remove
+
+        with self._lock:
+            busy = self.running()
+            if busy is not None and busy.name == job.name:
+                return 0  # futás közben nem nyúlunk hozzá
+            return remove([i for i in job_garbage(job.workdir) if i.reason != "backup"])
+
+    def delete(self, job: Job, with_output: bool = False) -> list[Path]:
+        """Véglegesen törli a projekt mappáját (és kérésre a kész videót és feliratot); a törölt utakat adja."""
+        with self._lock:
+            busy = self.running()
+            if busy is not None and busy.name == job.name:
+                raise RuntimeError(f"A projekt éppen fut: {job.name}")
+            work = self.work.resolve()
+            if job.workdir.resolve().parent != work:
+                raise ValueError(f"Nem a munkaterület projektje: {job.workdir}")
+            removed = [job.workdir]
+            shutil.rmtree(job.workdir)
+            if with_output:
+                for p in (job.output, job.output.with_suffix(".hu.srt")):
+                    if p.exists():
+                        p.unlink()
+                        removed.append(p)
+            self._procs.pop(job.name, None)
+            return removed
+
     def stop(self, job: Job) -> bool:
         return runlock.request_stop(job.workdir) is not None
 
