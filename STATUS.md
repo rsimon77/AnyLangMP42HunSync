@@ -5,6 +5,15 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Javítások a felhasználói visszajelzés alapján (2026-10-28)
+- **Hangtípus:**
+  - Eddig a váltás csak a config.yaml-ba került, a táblázatban nem látszott, és egy teljes voices-újrafuttatás kellett volna hozzá (minden mondat újragenerálása).
+  - Most azonnal a projektbe kerül, és a hangmagasság-korrekció újraszámolódik. Edge-hangnál a beszélő mondatai újragenerálásra kerülnek.
+  - Egy „Alkalmazás” gomb csak újrakever.
+- **Mondatok táblázata:** a magyar oszlop közvetlenül szerkeszthető (`static_columns`), a módosítás azonnal mentődik (✏️). A sorra kattintás továbbra is betölti a szerkesztőt.
+- A böngészőben kipróbálva a `bench3_opt`-on: női → automatikus hangmagasság → automatikus hangtípus (gyerek, +4,9) → alkalmazás; cella szerkesztése és visszaállítása.
+- 181 teszt, mind átmegy.
+
 ## Indítószkript (2026-10-28)
 - `start.sh` és a Finderből dupla kattintással indítható `Start.command`:
   - ellenőrzés, majd `uv sync`;

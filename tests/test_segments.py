@@ -168,3 +168,41 @@ def test_previews_shift_pitch(tmp_path):
     sf.write(str(tmp_path / "speakers/SPK0_cal0.wav"), tone, sr)
     assert seged.speaker_preview(tmp_path, "SPK0", -3).endswith("preview/SPK0.wav")
     assert seged.speaker_preview(tmp_path, "SPK1", 1) is None
+
+
+def test_speaker_kind_applies_at_once_with_pitch(tmp_path):
+    from mp4translator.config import Config
+
+    m = _manifest(tmp_path)
+    sp = m.speakers["SPK0"]
+    sp.f0, sp.clone_f0, sp.kind, sp.kind_source = 284.0, 229.0, "female", "auto"
+    cfg = Config()
+    assert seged.set_speaker_kind(m, "SPK0", "child", cfg)
+    assert (sp.kind, sp.kind_source, sp.pitch_source) == ("child", "config", "auto")
+    assert sp.pitch_shift == pytest.approx(3.73, abs=0.01)  # gyerekként korrigálni kell
+    assert seged.needs_remix(m) and seged.pending(m, tmp_path) == []  # XTTS-nél nincs új hanggenerálás
+    assert not seged.set_speaker_kind(m, "SPK0", "child", cfg)
+    assert seged.set_speaker_kind(m, "SPK0", None, cfg)  # vissza automatikusra
+    assert (sp.kind, sp.kind_source, sp.pitch_shift) == ("female", "auto", 0.0)
+
+
+def test_speaker_kind_keeps_manual_pitch_and_resynths_edge(tmp_path):
+    from mp4translator.config import Config
+
+    m = _manifest(tmp_path)
+    sp = m.speakers["SPK0"]
+    sp.f0, sp.clone_f0, sp.pitch_shift, sp.pitch_source = 284.0, 229.0, -1.0, "config"
+    seged.set_speaker_kind(m, "SPK0", "child", Config(tts="edge"))
+    assert sp.pitch_shift == -1.0
+    assert len(seged.pending(m, tmp_path)) == 3  # az Edge más hangot választ → a beszélő mondatai újra
+
+
+def test_edit_texts_from_table(tmp_path):
+    m = _manifest(tmp_path)
+    table = seged.rows(m, tmp_path)
+    table[1][5] = "  átírt   sor "
+    table[2][5] = ""  # üresre törölt cella: nem írjuk felül
+    assert seged.edit_texts(m, table) == [1]
+    assert m.segments[1].text_hu == "átírt sor" and m.segments[1].edited
+    assert m.segments[2].text_hu == "sor 2"
+    assert seged.edit_texts(m, table) == []

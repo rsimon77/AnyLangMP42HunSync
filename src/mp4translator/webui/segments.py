@@ -15,7 +15,7 @@ from ..config import Config
 from ..manifest import Manifest, Segment
 from ..pipeline import STEP_NAMES
 from ..steps.synthesize import is_synthesized
-from ..voice_kind import pitch_correction
+from ..voice_kind import classify_kind, pitch_correction
 
 RESYNTH_FROM = "synthesize"
 REMIX_FROM = "align"  # a hangmagasság az illesztéskor kerül a hangra: elég innen újrafuttatni
@@ -129,6 +129,39 @@ def set_speaker_pitch(m: Manifest, speaker: str, semitones: float | None, cfg: C
         sp.pitch_shift, sp.pitch_source = st, source
         invalidate_mix(m)
     return st
+
+
+def set_speaker_kind(m: Manifest, speaker: str, kind: str | None, cfg: Config) -> bool:
+    """A beszélő hangtípusa kézzel (male/female/child), None = automatikus. Azonnal érvényes: a hangmagasság-
+    korrekció újraszámolódik (ha nem kézi), Edge-hangnál a beszélő mondatai újragenerálódnak (más hang kell)."""
+    sp = m.speakers.get(speaker)
+    if sp is None:
+        raise EditError(f"Ismeretlen beszélő: {speaker}")
+    new = (classify_kind(sp.f0, cfg), "auto") if kind is None else (kind, "config")
+    if new == (sp.kind, sp.kind_source):
+        return False
+    sp.kind, sp.kind_source = new
+    if sp.pitch_source != "config":
+        sp.pitch_shift, sp.pitch_source = pitch_correction(sp.f0, sp.clone_f0, sp.kind, cfg), "auto"
+    if cfg.tts == "edge":  # az Edge a hangtípus szerint választ hangot
+        for seg in m.segments:
+            if seg.speaker == speaker:
+                seg.tts_text = None
+    invalidate_mix(m)
+    return True
+
+
+def edit_texts(m: Manifest, table: list[list]) -> list[int]:
+    """A táblázatban átírt magyar szövegek mentése; a módosított mondatok azonosítóit adja."""
+    changed = []
+    for row in table:
+        if not row or row[0] in (None, ""):
+            continue
+        seg = find(m, int(row[0]))
+        text = " ".join(str(row[-1] or "").split())
+        if text and text != (seg.text_hu or "") and edit(m, seg.id, text, seg.speaker):
+            changed.append(seg.id)
+    return changed
 
 
 def preview(src: Path, out: Path, speed: float, semitones: float) -> str:
