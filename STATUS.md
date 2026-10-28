@@ -5,6 +5,15 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Indítószkript (2026-10-28)
+- `start.sh` és a Finderből dupla kattintással indítható `Start.command`:
+  - ellenőrzés, majd `uv sync`;
+  - az Ollama indítása, ha nem fut (saját folyamatcsoportban, a projekt memóriatakarékos beállításaival);
+  - figyelmeztetés, ha a beállított fordítómodell nincs letöltve;
+  - a webes felület indítása.
+- Ctrl+C vagy az ablak bezárása leállítja a felületet, és az Ollamát is, ha a szkript indította. Ha fut egy szinkron, az Ollama megmarad.
+- Valódi terminálban (pty) kipróbálva: sima Ctrl+C, Ctrl+C futó szinkron mellett, SIGTERM, `./start.sh stop`.
+
 ## Projektkezelés (2026-10-28)
 - A felületen a „Munka” helyett „Projekt” (angolul „Project”) szerepel.
 - A projektkezelő a Szinkron fül tetején van:

@@ -59,6 +59,19 @@ Az első futás letölti ezeket a modelleket:
 
 Helyben futó webes felület angolul és magyarul (Gradio). Csak erről a gépről érhető el.
 
+A legegyszerűbb indítás, az Ollamával együtt:
+
+```bash
+./start.sh
+```
+
+- Ellenőrzi a szükséges programokat, kell esetén telepíti a Python-csomagokat, elindítja az Ollamát, ha még nem fut, aztán elindítja a webes felületet, és megnyitja a böngészőben.
+- **Ctrl+C**: leállítja a felületet, és az Ollamát is, ha a szkript indította. Ha közben még fut egy szinkron, az Ollama annak kedvéért tovább fut.
+- `./start.sh stop`: leállítás egy másik terminálból; `./start.sh --port 7861`: másik port; `./start.sh --no-open`: a böngésző megnyitása nélkül.
+- **Start.command**: ugyanez dupla kattintással a Finderből; a terminálablak bezárása leállítja.
+
+Szkript nélkül:
+
 ```bash
 uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
 ```

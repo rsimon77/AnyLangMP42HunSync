@@ -59,6 +59,19 @@ The first run downloads these models:
 
 A local web interface in English and Hungarian (built with Gradio). It is reachable only from this machine.
 
+The easiest way to start it, together with Ollama:
+
+```bash
+./start.sh
+```
+
+- It checks the tools, installs the Python packages if needed, starts Ollama if it is not running yet, then starts the web UI and opens it in the browser.
+- **Ctrl+C** stops the UI, and Ollama too if the script started it. If a dubbing run is still going, Ollama is kept running for it.
+- `./start.sh stop` stops them from another terminal; `./start.sh --port 7861` uses another port; `./start.sh --no-open` does not open the browser.
+- **Start.command** does the same with a double-click in Finder; closing its Terminal window stops it.
+
+Without the script:
+
 ```bash
 uv run mp4translator ui          # opens http://127.0.0.1:7860
 ```
