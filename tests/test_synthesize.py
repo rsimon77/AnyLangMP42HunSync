@@ -264,3 +264,40 @@ def test_reloaded_tts_gets_measured_speaker_rates(make_ctx):
     ctx.manifest.speakers["SPK0"].syllables_per_second = 4.4
     synthesize.run(ctx)
     assert ctx.tts.rates == {"SPK0": 4.4}
+
+
+def test_resume_after_edit_regenerates_only_edited_line(make_ctx):
+    build, log = make_ctx
+    ctx = build([SHORT, SHORT, SHORT])
+    synthesize.run(ctx)
+    log.clear()
+    seg = ctx.manifest.segments[1]
+    seg.text_hu, seg.edited = "Helló!", True
+    ctx.resuming = True  # a szerkesztő a synthesize közepére állítja a futást
+    synthesize.run(ctx)
+    assert [e[1] for e in log if e[0] == "tts"] == ["Helló!"]
+
+
+def test_edited_line_is_sped_up_not_shortened(make_ctx):
+    build, log = make_ctx
+    ctx = build([LONG], answers={0: "Rövid."})
+    ctx.manifest.segments[0].edited = True
+    synthesize.run(ctx)
+    seg = ctx.manifest.segments[0]
+    assert seg.text_hu == LONG and not any(e[0] == "llm" for e in log)
+    assert seg.action in ("forced_speedup", "overflow")
+
+
+def test_only_speakers_of_pending_lines_are_prepared(make_ctx, monkeypatch):
+    build, log = make_ctx
+    ctx = build([SHORT, SHORT])
+    ctx.manifest.speakers["SPK1"] = Speaker(ref_audio="ref1.wav")
+    ctx.manifest.segments[1].speaker = "SPK1"
+    synthesize.run(ctx)
+    ctx.release_models()
+    ctx.manifest.segments[1].tts_text = None  # csak az SPK1 mondata generálódik újra
+    ctx.resuming = True
+    seen = []
+    monkeypatch.setattr(FakeTTS, "prepare_speaker", lambda self, spk, ref, kind=None: (seen.append(spk), self.prepared.add(spk)))
+    synthesize.run(ctx)
+    assert seen == ["SPK1"]

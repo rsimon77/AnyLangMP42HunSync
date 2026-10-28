@@ -62,7 +62,7 @@ class Workspace:
         self.work = root / "work"
         self.outputs = root / "output"
         self._procs: dict[str, subprocess.Popen] = {}  # a felületről indított, még élő folyamatok
-        self._lock = threading.Lock()  # a Gradio szálakon futtatja a kezelőket: ellenőrzés + indítás egyben
+        self._lock = threading.RLock()  # a Gradio szálakon futtatja a kezelőket: ellenőrzés + indítás egyben
 
     # --- munkák ---
 
@@ -168,6 +168,26 @@ class Workspace:
                     self.command(job, from_step), cwd=self.root, stdout=log, stderr=subprocess.STDOUT, env=env,
                     start_new_session=True,  # a felület leállítása ne vigye magával a futást
                 )
+
+    def edit_manifest(self, job: Job, change) -> Manifest:
+        """A manifest módosítása (pl. szegmensszerkesztő); futás közben nem szabad, mert a futás felülírná."""
+        with self._lock:
+            busy = self.running()
+            if busy is not None:
+                raise RuntimeError(f"Már fut egy feldolgozás: {busy.name}")
+            path = job.workdir / "manifest.json"
+            m = Manifest.load(path)
+            change(m)
+            m.save(path)
+            return m
+
+    def rerun_pending(self, job: Job) -> None:
+        """Csak a szerkesztett / újragenerálásra jelölt szegmensek, utána illesztés, keverés, mux."""
+        from .segments import prepare_rerun
+
+        with self._lock:
+            self.edit_manifest(job, prepare_rerun)
+            self.start(job)
 
     def stop(self, job: Job) -> bool:
         return runlock.request_stop(job.workdir) is not None

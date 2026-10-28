@@ -10,6 +10,7 @@ from ..models import DEMUCS, LLMS, WHISPERS, ModelChoice, ollama_tag
 from ..ollama import installed_models, is_installed, pull
 from ..pipeline import STEP_NAMES
 from ..steps.synthesize import is_synthesized
+from . import segments as seged
 from .i18n import LANGS, pick_lang, t
 from .jobs import Job, Workspace, ollama_ok, restart_ollama, start_ollama, step_states, stop_ollama, tail
 
@@ -63,6 +64,7 @@ def build(ws: Workspace) -> gr.Blocks:
 
     with gr.Blocks(title="AnyLangMP42HunSync") as demo:
         lang = gr.State("en")
+        was_running = gr.State(False)  # a mondatok táblázata a futás végén frissül
         with gr.Row():
             with gr.Column(scale=4):
                 tr(gr.Markdown(t("en", "title")), "title", "value")
@@ -158,7 +160,34 @@ def build(ws: Workspace) -> gr.Blocks:
                     downloads = tr(gr.File(label=t("en", "downloads"), file_count="multiple", interactive=False), "downloads")
                 report_md = gr.Markdown()
 
-            # --- 4. Beszélők ---
+            # --- 4. Mondatok (szegmensszerkesztő) ---
+            with gr.Tab(t("en", "tab_segments")) as tab_segments:
+                tr(gr.Markdown(t("en", "seg_note")), "seg_note", "value")
+                with gr.Row():
+                    seg_filter = tr_choices(
+                        tr(gr.Radio(choices=["all", "problems", "pending"], value="all", label=t("en", "seg_filter")),
+                           "seg_filter"),
+                        "seg_filter",
+                        ["all", "problems", "pending"],
+                    )
+                    with gr.Column():
+                        seg_pending_md = gr.Markdown()
+                        seg_apply_btn = tr(gr.Button(t("en", "seg_apply"), variant="primary"), "seg_apply", "value")
+                seg_df = gr.Dataframe(interactive=False, wrap=True, max_height=420,
+                                      column_widths=["5%", "12%", "8%", "9%", "33%", "33%"])
+                with gr.Row():
+                    seg_id = tr(gr.Number(label=t("en", "seg_id"), precision=0, interactive=False, scale=1), "seg_id")
+                    seg_speaker = tr(gr.Dropdown(label=t("en", "seg_speaker"), interactive=True, scale=1), "seg_speaker")
+                    seg_en = tr(gr.Textbox(label=t("en", "seg_en"), interactive=False, scale=4), "seg_en")
+                seg_hu = tr(gr.Textbox(label=t("en", "seg_hu"), lines=2), "seg_hu")
+                with gr.Row():
+                    seg_orig = tr(gr.Audio(label=t("en", "seg_orig_audio"), interactive=False), "seg_orig_audio")
+                    seg_dub = tr(gr.Audio(label=t("en", "seg_dub_audio"), interactive=False), "seg_dub_audio")
+                with gr.Row():
+                    seg_save_btn = tr(gr.Button(t("en", "seg_save"), variant="primary"), "seg_save", "value")
+                    seg_resynth_btn = tr(gr.Button(t("en", "seg_resynth")), "seg_resynth", "value")
+
+            # --- 5. Beszélők ---
             with gr.Tab(t("en", "tab_speakers")) as tab_speakers:
                 speakers_df = tr(gr.Dataframe(label=t("en", "speakers_table"), interactive=False), "speakers_table")
                 with gr.Row():
@@ -172,7 +201,7 @@ def build(ws: Workspace) -> gr.Blocks:
                     preview_btn = tr(gr.Button(t("en", "preview"), size="sm"), "preview", "value")
                     preview_df = gr.Dataframe(interactive=False)
 
-        for tab, key in [(tab_jobs, "tab_jobs"), (tab_settings, "tab_settings"), (tab_result, "tab_result"), (tab_speakers, "tab_speakers")]:
+        for tab, key in [(tab_jobs, "tab_jobs"), (tab_settings, "tab_settings"), (tab_result, "tab_result"), (tab_segments, "tab_segments"), (tab_speakers, "tab_speakers")]:
             tr(tab, key)
         tr(preview_acc, "threshold_preview")
 
@@ -421,6 +450,86 @@ def build(ws: Workspace) -> gr.Blocks:
                 rows.append([th, max(labels) + 1 if labels else 0])
             return gr.update(value=rows, headers=[t(lang, "threshold"), t(lang, "count")])
 
+        # --- mondatok ---
+
+        def seg_headers(lang):
+            return [t(lang, f"seg_col_{c}") for c in ("id", "time", "speaker", "state", "en", "hu")]
+
+        def load_segments(name, lang, only):
+            job = job_of(name)
+            m = job.manifest() if job else None
+            if m is None or not any(s.text_hu for s in m.segments):
+                return (gr.update(value=[], headers=seg_headers(lang)), t(lang, "seg_not_ready"),
+                        gr.update(interactive=False), gr.update(choices=[]))
+            n = len(seged.pending(m, job.workdir))
+            return (
+                gr.update(value=seged.rows(m, job.workdir, only or "all"), headers=seg_headers(lang)),
+                t(lang, "seg_pending", n=n),
+                gr.update(interactive=n > 0 and ws.running() is None),
+                gr.update(choices=list(m.speakers) or ["SPK0"]),
+            )
+
+        def load_segment(name, seg_no):
+            """A kiválasztott mondat a szerkesztőbe: szövegek, beszélő, eredeti és magyar hang."""
+            job = job_of(name)
+            m = job.manifest() if job else None
+            if m is None or seg_no is None:
+                return None, "", "", None, None, None
+            seg = seged.find(m, int(seg_no))
+            return (seg.id, seg.text_en, seg.text_hu or "", seg.speaker,
+                    seged.original_clip(job.workdir, seg), seged.dub_clip(job.workdir, seg))
+
+        def seg_tick(name, lang, only, before):
+            """Ha az előző ellenőrzés óta befejeződött egy futás, a mondatok táblázata frissül."""
+            now = ws.running() is not None
+            if before and not now:
+                return *load_segments(name, lang, only), now
+            return gr.update(), gr.update(), gr.update(), gr.update(), now
+
+        def on_seg_select(name, evt: gr.SelectData):
+            row = evt.row_value or []
+            return load_segment(name, row[0] if row else None)
+
+        def seg_change(name, lang, change):
+            job = job_of(name)
+            if job is None:
+                raise gr.Error(t(lang, "no_job"))
+            try:
+                ws.edit_manifest(job, change)
+            except RuntimeError:
+                busy = ws.running()
+                raise gr.Error(t(lang, "seg_busy", name=busy.name if busy else "?"))
+            except seged.EditError as e:
+                raise gr.Error(str(e))
+
+        def on_seg_save(name, lang, seg_no, text, speaker):
+            if seg_no is None:
+                raise gr.Error(t(lang, "seg_pick"))
+            changed = []
+            seg_change(name, lang, lambda m: changed.append(seged.edit(m, int(seg_no), text or "", speaker)))
+            gr.Info(t(lang, "seg_saved", id=int(seg_no)) if changed and changed[0] else t(lang, "seg_unchanged"))
+
+        def on_seg_resynth(name, lang, seg_no):
+            if seg_no is None:
+                raise gr.Error(t(lang, "seg_pick"))
+            seg_change(name, lang, lambda m: seged.request_resynth(m, int(seg_no)))
+            gr.Info(t(lang, "seg_marked", id=int(seg_no)))
+
+        def on_seg_apply(name, lang):
+            job = job_of(name)
+            m = job.manifest() if job else None
+            n = len(seged.pending(m, job.workdir)) if m else 0
+            if n == 0:
+                raise gr.Error(t(lang, "seg_nothing"))
+            try:
+                ws.rerun_pending(job)
+            except RuntimeError:
+                busy = ws.running()
+                raise gr.Error(t(lang, "seg_busy", name=busy.name if busy else "?"))
+            except seged.EditError as e:
+                raise gr.Error(str(e))
+            gr.Info(t(lang, "seg_applied", n=n))
+
         # --- nyelv ---
 
         def relabel(lang_v):
@@ -460,6 +569,21 @@ def build(ws: Workspace) -> gr.Blocks:
         kind_radio.input(on_kind, [job_dd, speaker_dd, kind_radio])
         apply_btn.click(on_apply, [job_dd, lang]).then(refresh, [job_dd, lang], status_outputs)
         preview_btn.click(on_preview, [job_dd, lang], preview_df)
+        seg_outputs = [seg_df, seg_pending_md, seg_apply_btn, seg_speaker]
+        seg_editor = [seg_id, seg_en, seg_hu, seg_speaker, seg_orig, seg_dub]
+        tab_segments.select(load_segments, [job_dd, lang, seg_filter], seg_outputs)
+        gr.Timer(3.0).tick(seg_tick, [job_dd, lang, seg_filter, was_running], seg_outputs + [was_running])
+        seg_filter.change(load_segments, [job_dd, lang, seg_filter], seg_outputs)
+        seg_df.select(on_seg_select, job_dd, seg_editor)
+        seg_save_btn.click(on_seg_save, [job_dd, lang, seg_id, seg_hu, seg_speaker]).then(
+            load_segments, [job_dd, lang, seg_filter], seg_outputs
+        )
+        seg_resynth_btn.click(on_seg_resynth, [job_dd, lang, seg_id]).then(
+            load_segments, [job_dd, lang, seg_filter], seg_outputs
+        )
+        seg_apply_btn.click(on_seg_apply, [job_dd, lang]).then(
+            load_segments, [job_dd, lang, seg_filter], seg_outputs
+        ).then(refresh, [job_dd, lang], status_outputs)
 
     return demo
 

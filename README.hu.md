@@ -70,6 +70,11 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
   - ha az Ollama nem fut, egy gombbal elindítható.
 - **Beállítások:** fordítómodell (ajánlott lista; a ✓ a letöltött modelleket jelöli, egy gomb letölti a kiválasztottat, haladásjelzővel), Whisper- és Demucs-modell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
 - **Eredmény:** a szinkronizált videó lejátszása (a böngésző a magyar sávot játssza), az MP4, a felirat és a riport letöltése, a riport megjelenítése.
+- **Mondatok:** az összes mondat táblázatban (idő, beszélő, angol, magyar, állapot).
+  - Egy mondatra kattintva meghallgatható az eredeti és a magyar hang, és javítható a magyar szöveg vagy a beszélő. A mondat ugyanazzal a szöveggel is újragenerálható, ha a hang elrontotta.
+  - Az **Alkalmazás** csak a módosított mondatokat (✏️) generálja újra, utána újraépíti a videót; egy mondat kb. 30 másodperc.
+  - A kézzel javított szöveg úgy hangzik el, ahogy beírtad: az LLM nem rövidíti, a túl hosszú mondat inkább gyorsítva lesz.
+  - Szűrővel csak az erősen gyorsított vagy a következőbe belelógó (⚠️), illetve csak a módosított mondatok is megjeleníthetők.
 - **Beszélők:**
   - beszélőnként a felismert hangtípus és az alaphang;
   - meghallgatható az eredeti hangminta és a klónozott hang;

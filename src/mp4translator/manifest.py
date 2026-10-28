@@ -17,6 +17,7 @@ class Segment(BaseModel):
     speed_factor: float = 1.0
     action: str | None = None  # ok | borrow | speedup | forced_speedup | overflow
     shorten_count: int = 0
+    edited: bool = False  # kézzel javított szöveg (szegmensszerkesztő): az LLM nem rövidíti, inkább gyorsítás
     note: str | None = None
     synth_seconds: float | None = None  # a hanggenerálásra fordított idő (méréshez)
     tts_attempts: int | None = None  # TTS-hívások száma, újrapróbálásokkal együtt

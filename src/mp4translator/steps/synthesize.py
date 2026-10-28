@@ -35,11 +35,14 @@ def shorten_target(text: str, duration: float, available: float) -> int:
     return max(int(count_hu_syllables(text) * available / duration * 0.95), 3)
 
 
-def load_tts(ctx: Context) -> TTSEngine:
+def load_tts(ctx: Context, needed: set[str] | None = None) -> TTSEngine:
+    """Betölti a hangmotort, és felkészíti a beszélőket (csak a szükségeseket, ha meg vannak adva)."""
     fresh = "tts" not in ctx.__dict__
     tts = ctx.tts
     if fresh:
         for name, speaker in ctx.manifest.speakers.items():
+            if needed is not None and name not in needed:
+                continue  # pl. egyetlen javított mondatnál fölösleges minden hangmintát feldolgozni
             if tts.clones_voice and not speaker.ref_audio:
                 raise StepError(f"Nincs hangminta a(z) {name} beszélőhöz – futtasd újra a voices lépéstől.")
             ref = ctx.workdir / speaker.ref_audio if speaker.ref_audio else None
@@ -115,11 +118,11 @@ def run(ctx: Context) -> None:
     while todo:
         if round_no:
             ctx.console.print(f"  {round_no}. rövidítési kör: {len(todo)} szegmens újragenerálása")
-        tts = load_tts(ctx)
+        tts = load_tts(ctx, {m.segments[i].speaker for i in todo})
         too_long: list[tuple[Segment, int]] = []
         for i in todo:
             seg = m.segments[i]
-            can_shorten = seg.shorten_count < cfg.shorten_rounds
+            can_shorten = not seg.edited and seg.shorten_count < cfg.shorten_rounds
             fit, dur = synthesize_segment(ctx, tts, i, can_shorten)
             if fit.action == "shorten":
                 available = seg.end - seg.start + max(m.next_start(i) - seg.end, 0.0) * cfg.gap_borrow_ratio

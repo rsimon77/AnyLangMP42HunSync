@@ -169,6 +169,7 @@ def run(ctx: Context) -> None:
         for seg in m.segments:
             seg.text_hu = None
             seg.shorten_count = 0
+            seg.edited = False
         ctx.save()
 
     size = ctx.cfg.translate_batch_size

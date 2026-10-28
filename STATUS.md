@@ -5,6 +5,17 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Szegmensszerkesztő (2026-10-28)
+- Webes felület, **Mondatok** fül. A logika a `src/mp4translator/webui/segments.py`-ban van, Gradio nélkül, tesztelve.
+  - A javítás a manifestbe kerül. Az **Alkalmazás** a futást a synthesize lépés közepére állítja, így a szokásos folytatás csak a nem kész mondatokat generálja újra, utána illeszt, kever és muxol.
+  - A kézzel javított szöveg `edited` jelölést kap: az LLM nem rövidíti, a túl hosszú mondat inkább gyorsítva lesz. Egy újabb fordítás (translate) törli a jelölést.
+  - Az újragenerálás csak azoknak a beszélőknek a hangmintáját dolgozza fel, akiknek van újragenerálandó mondatuk: egy mondat 49 helyett 21 mp, a teljes újraépítés kb. 30 mp a 3 perces részleten.
+- A böngészőben kipróbálva:
+  - szöveg javítása, majd alkalmazás;
+  - újragenerálás ugyanazzal a szöveggel;
+  - a táblázat magától frissül a futás végén.
+- 159 teszt, mind átmegy.
+
 ## Modellválasztás és kódátnézés (2026-10-27)
 - Választható modellek: fordító LLM (ajánlott lista, `src/mp4translator/models.py`), Whisper, Demucs, hangmotor.
   - Parancssorban: `--llm`, `--whisper`, `--demucs`, `--tts`; a `models` parancs listáz.

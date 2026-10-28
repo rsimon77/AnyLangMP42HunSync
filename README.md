@@ -70,6 +70,11 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
   - start Ollama with one click if it is not running.
 - **Settings:** translation model (recommended list; ✓ marks downloaded models, and a button downloads the selected one with progress), Whisper and Demucs model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
 - **Result:** watch the dubbed video (the browser plays the Hungarian track), download the MP4, the subtitle and the report, and read the report.
+- **Lines:** a table of every line (time, speaker, English, Hungarian, status).
+  - Click a line to hear the original and the Hungarian audio, then fix the Hungarian text or the speaker. A line can also be regenerated with the same text when the voice got it wrong.
+  - **Apply** regenerates only the changed lines (✏️), then rebuilds the video; one line takes about 30 seconds.
+  - Hand-edited text is spoken as written: the LLM never shortens it, and a line that is too long is sped up instead.
+  - Filters show only the lines that were sped up a lot or run into the next line (⚠️), or only the changed ones.
 - **Speakers:**
   - see each speaker's detected voice type and pitch;
   - listen to the original sample and the cloned voice;
