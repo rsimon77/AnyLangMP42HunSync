@@ -111,3 +111,14 @@ def test_pitch_shift_keeps_duration(tmp_path):
     y, file_sr = sf.read(str(tmp_path / "b.wav"), dtype="float32")
     assert file_sr == sr
     assert median_f0(y, sr) == pytest.approx(200 * 2 ** (4 / 12), rel=0.03)
+
+
+def test_manual_speaker_pitch_overrides_correction():
+    from mp4translator.config import Config
+    from mp4translator.manifest import Speaker
+    from mp4translator.steps.voices import speaker_pitch
+
+    sp = Speaker(f0=400.0, clone_f0=300.0, kind="child")
+    assert speaker_pitch("SPK0", sp, Config(speaker_pitch={"SPK0": -2.0})) == (-2.0, "config")
+    st, source = speaker_pitch("SPK0", sp, Config())
+    assert source == "auto" and st > 4

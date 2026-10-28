@@ -7,6 +7,7 @@ import numpy as np
 import soundfile as sf
 
 from ..audio import read_mono
+from ..config import Config
 from ..context import Context
 from ..manifest import Speaker
 from ..text import count_hu_syllables
@@ -102,6 +103,13 @@ def speaker_kind(name: str, f0: float | None, ctx: Context) -> tuple[str | None,
     if name in ctx.cfg.speaker_kinds:
         return ctx.cfg.speaker_kinds[name], "config"
     return classify_kind(f0, ctx.cfg), "auto"
+
+
+def speaker_pitch(name: str, sp: Speaker, cfg: Config) -> tuple[float, str]:
+    """A beszélő hangmagasság-eltolása: a config.yaml speaker_pitch felülírja az automatikus korrekciót."""
+    if name in cfg.speaker_pitch:
+        return cfg.speaker_pitch[name], "config"
+    return pitch_correction(sp.f0, sp.clone_f0, sp.kind, cfg), "auto"
 
 
 def describe(name: str, sp: Speaker) -> str:
@@ -204,7 +212,7 @@ def run(ctx: Context) -> None:
         speaker.syllables_per_second = measure_rate(ctx, name, ref_path.parent)
         tts.set_rate(name, speaker.syllables_per_second)
         speaker.clone_f0 = median_f0_of_files(calibration_files(ref_path.parent, name))
-        speaker.pitch_shift = pitch_correction(speaker.f0, speaker.clone_f0, speaker.kind, cfg)
+        speaker.pitch_shift, speaker.pitch_source = speaker_pitch(name, speaker, cfg)
         m.speakers[name] = speaker
         rate = f"{speaker.syllables_per_second:.1f} szótag/mp" if speaker.syllables_per_second else "nem mérhető"
         ctx.console.print(

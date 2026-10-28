@@ -66,3 +66,37 @@ def test_negative_gap_is_ignored():
     f = plan_fit(2.2, 0, 2.0, 1.5, CFG, False)
     assert f.action == "speedup"
     assert f.speed == pytest.approx(1.1)
+
+
+def test_run_applies_speaker_and_line_pitch_and_drops_stale_fit(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    import numpy as np
+    import soundfile as sf
+    from rich.console import Console
+
+    from mp4translator.context import Context
+    from mp4translator.manifest import Manifest, Segment, Speaker
+    from mp4translator.steps import align
+
+    (tmp_path / "tts").mkdir()
+    segs = []
+    for i in range(3):
+        sf.write(str(tmp_path / f"tts/seg_{i:04d}.wav"), np.zeros(4410, np.float32), 44100)
+        segs.append(Segment(id=i, start=float(i), end=i + 0.5, text_en="x", tts_file=f"tts/seg_{i:04d}.wav"))
+    segs[1].pitch_offset = 2.0
+    segs[2].pitch_offset = -1.0  # a beszélő +1-ével együtt 0 → nincs illesztés
+    stale = tmp_path / "tts/seg_0002_fit.wav"
+    stale.write_bytes(b"old")
+    m = Manifest(source="a.mp4", duration=3.0, segments=segs, speakers={"SPK0": Speaker(pitch_shift=1.0)})
+    calls = []
+
+    def fake_stretch(src, dst, factor, semitones=0.0):
+        calls.append((Path(dst).name, factor, semitones))
+        sf.write(str(dst), np.zeros(4410, np.float32), 44100)
+
+    monkeypatch.setattr(align, "time_stretch", fake_stretch)
+    ctx = Context(Config(), Path("in.mp4"), Path("out.mp4"), tmp_path, m, console=Console(quiet=True))
+    align.run(ctx)
+    assert sorted(calls) == [("seg_0000_fit.wav", 1.0, 1.0), ("seg_0001_fit.wav", 1.0, 3.0)]
+    assert not stale.exists()

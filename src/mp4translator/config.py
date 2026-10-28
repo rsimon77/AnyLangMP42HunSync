@@ -1,8 +1,8 @@
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Config(BaseModel):
@@ -49,6 +49,8 @@ class Config(BaseModel):
     pitch_correction: Literal["off", "child", "all"] = "child"
     min_pitch_shift: float = 1.5  # félhang; ennél kisebb eltérést nem korrigálunk
     max_pitch_shift: float = 7.0  # félhang; felső határ (nagyobb eltolás már torzít)
+    # Kézi hangmagasság beszélőnként (félhang), felülírja az automatikus korrekciót; pl. {SPK1: 2.5}
+    speaker_pitch: dict[str, Annotated[float, Field(ge=-12, le=12)]] = {}
 
     # Állathangok (ugatás, nyávogás stb.) megtartása a beszédszünetekből
     keep_animal_sounds: bool = True

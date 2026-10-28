@@ -5,6 +5,18 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Hangmagasság beszélőnként és mondatonként (2026-10-28)
+- **Beszélők fül:** a klónozott hang hangmagassága csúszkával állítható (±12 félhang), előnézettel, vagy visszaállítható automatikusra.
+  - Az érték a munka `config.yaml`-jába kerül (`speaker_pitch`), így a voices lépés újrafuttatása is megtartja.
+  - A riportban a kézi érték „(kézi)” jelölést kap.
+- **Mondatok fül:** egy mondat saját eltolása (`Segment.pitch_offset`), ami a beszélőéhez adódik. A táblázatban így jelenik meg: „+2♪”.
+- Egyik sem generál új hangot: csak az align, a mix és a mux fut újra, a 3 perces részleten kb. 8 mp alatt.
+- Az align törli az elavult `_fit.wav` fájlt, ha egy mondatnál már nem kell illesztés.
+- A böngészőben kipróbálva:
+  - beszélő +6 félhang: a próbamondat 223 Hz-ről 321 Hz-re ment;
+  - mondat −2 félhang: összesen +3,6 félhang, a várt +4 közelében.
+- 165 teszt, mind átmegy.
+
 ## Szegmensszerkesztő (2026-10-28)
 - Webes felület, **Mondatok** fül. A logika a `src/mp4translator/webui/segments.py`-ban van, Gradio nélkül, tesztelve.
   - A javítás a manifestbe kerül. Az **Alkalmazás** a futást a synthesize lépés közepére állítja, így a szokásos folytatás csak a nem kész mondatokat generálja újra, utána illeszt, kever és muxol.

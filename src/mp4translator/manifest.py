@@ -18,6 +18,7 @@ class Segment(BaseModel):
     action: str | None = None  # ok | borrow | speedup | forced_speedup | overflow
     shorten_count: int = 0
     edited: bool = False  # kézzel javított szöveg (szegmensszerkesztő): az LLM nem rövidíti, inkább gyorsítás
+    pitch_offset: float = 0.0  # félhang; csak erre a mondatra, a beszélő hangmagasságán felül
     note: str | None = None
     synth_seconds: float | None = None  # a hanggenerálásra fordított idő (méréshez)
     tts_attempts: int | None = None  # TTS-hívások száma, újrapróbálásokkal együtt
@@ -37,6 +38,7 @@ class Speaker(BaseModel):
     f0: float | None = None  # az eredeti hang alaphangjának mediánja (Hz)
     clone_f0: float | None = None  # a klónozott hangé (Hz)
     pitch_shift: float = 0.0  # félhang; az align lépés alkalmazza
+    pitch_source: str | None = None  # auto | config (kézzel állítva)
 
 
 class KeptSound(BaseModel):

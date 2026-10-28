@@ -48,11 +48,13 @@ def run(ctx: Context) -> None:
             raise StepError(f"A(z) {seg.id}. szegmenshez nincs hangfájl – előbb a synthesize lépés kell.")
         src = ctx.workdir / seg.tts_file
         speaker = m.speakers.get(seg.speaker)
-        shift = speaker.pitch_shift if speaker else 0.0
-        if seg.speed_factor > 1.001 or shift:
-            dst = ctx.path(f"tts/seg_{seg.id:04d}_fit.wav")
+        shift = (speaker.pitch_shift if speaker else 0.0) + seg.pitch_offset
+        dst = ctx.path(f"tts/seg_{seg.id:04d}_fit.wav")
+        if seg.speed_factor > 1.001 or abs(shift) >= 0.01:
             stretch.append((src, dst, seg.speed_factor, shift))
             src = dst
+        else:
+            dst.unlink(missing_ok=True)  # egy korábbi illesztés már nem érvényes (pl. a hangmagasságot visszaállították)
         sources.append(src)
     # Szegmensenként egy ffmpeg-folyamat: párhuzamosan futtatva többszörösen gyorsabb
     with ThreadPoolExecutor(max_workers=4) as pool:

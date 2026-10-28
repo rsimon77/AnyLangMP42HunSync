@@ -10,11 +10,16 @@ from pathlib import Path
 import numpy as np
 import soundfile as sf
 
+from ..audio import time_stretch
+from ..config import Config
 from ..manifest import Manifest, Segment
 from ..pipeline import STEP_NAMES
 from ..steps.synthesize import is_synthesized
+from ..voice_kind import pitch_correction
 
 RESYNTH_FROM = "synthesize"
+REMIX_FROM = "align"  # a hangmagasság az illesztéskor kerül a hangra: elég innen újrafuttatni
+MAX_PITCH = 12.0  # félhang
 PROBLEMS = ("forced_speedup", "overflow")  # ezeket érdemes meghallgatni
 
 
@@ -51,7 +56,8 @@ def rows(m: Manifest, workdir: Path, only: str = "all") -> list[list]:
         if only == "pending" and mark != "✏️":
             continue
         speed = f" {s.speed_factor:.2f}×" if s.speed_factor > 1.001 else ""
-        out.append([s.id, f"{clock(s.start)}–{clock(s.end)}", s.speaker, mark + speed, s.text_en, s.text_hu or ""])
+        pitch = f" {s.pitch_offset:+g}♪" if s.pitch_offset else ""
+        out.append([s.id, f"{clock(s.start)}–{clock(s.end)}", s.speaker, mark + speed + pitch, s.text_en, s.text_hu or ""])
     return out
 
 
@@ -77,6 +83,77 @@ def edit(m: Manifest, seg_id: int, text_hu: str, speaker: str) -> bool:
     seg.speaker = speaker
     seg.note = None
     return True
+
+
+def needs_remix(m: Manifest) -> bool:
+    """Változott-e a hangmagasság az utolsó keverés óta (a videó elavult, de nem kell hangot generálni)."""
+    before = STEP_NAMES[: STEP_NAMES.index(REMIX_FROM)]
+    return set(before) <= set(m.steps_done) and STEP_NAMES[-1] not in m.steps_done
+
+
+def invalidate_mix(m: Manifest) -> None:
+    """Az illesztés, a keverés és a mux újrafut (a hangfájlok maradnak)."""
+    keep = STEP_NAMES[: STEP_NAMES.index(REMIX_FROM)]
+    m.steps_done = [s for s in m.steps_done if s in keep]
+    if m.in_progress in STEP_NAMES[STEP_NAMES.index(REMIX_FROM) :]:
+        m.in_progress = None
+
+
+def check_pitch(semitones: float) -> float:
+    st = round(float(semitones), 2)
+    if abs(st) > MAX_PITCH:
+        raise EditError(f"A hangmagasság legfeljebb ±{MAX_PITCH:g} félhang lehet.")
+    return st
+
+
+def set_line_pitch(m: Manifest, seg_id: int, semitones: float) -> bool:
+    """Csak erre a mondatra: ennyi félhanggal magasabb (negatív: mélyebb) a beszélő hangjánál."""
+    seg, st = find(m, seg_id), check_pitch(semitones)
+    if st == seg.pitch_offset:
+        return False
+    seg.pitch_offset = st
+    invalidate_mix(m)
+    return True
+
+
+def set_speaker_pitch(m: Manifest, speaker: str, semitones: float | None, cfg: Config) -> float:
+    """A beszélő hangmagassága kézzel (félhang); None = vissza az automatikus korrekcióra. Az új értéket adja."""
+    sp = m.speakers.get(speaker)
+    if sp is None:
+        raise EditError(f"Ismeretlen beszélő: {speaker}")
+    if semitones is None:
+        st, source = pitch_correction(sp.f0, sp.clone_f0, sp.kind, cfg), "auto"
+    else:
+        st, source = check_pitch(semitones), "config"
+    if (st, source) != (sp.pitch_shift, sp.pitch_source):
+        sp.pitch_shift, sp.pitch_source = st, source
+        invalidate_mix(m)
+    return st
+
+
+def preview(src: Path, out: Path, speed: float, semitones: float) -> str:
+    """Meghallgatható előnézet: a hang a megadott gyorsítással és hangmagassággal (a végleges keverés nélkül)."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    time_stretch(src, out, max(speed, 1.0), semitones)
+    return str(out)
+
+
+def line_preview(workdir: Path, m: Manifest, seg_id: int, semitones: float) -> str | None:
+    """A mondat magyar hangja a beszélő hangmagasságával és a mondat saját eltolásával."""
+    seg = find(m, seg_id)
+    if not is_synthesized(seg, workdir):
+        return None
+    sp = m.speakers.get(seg.speaker)
+    total = (sp.pitch_shift if sp else 0.0) + check_pitch(semitones)
+    return preview(workdir / seg.tts_file, workdir / "preview" / f"seg_{seg.id:04d}.wav", seg.speed_factor, total)
+
+
+def speaker_preview(workdir: Path, speaker: str, semitones: float) -> str | None:
+    """A beszélő próbamondata (klónozott hang) a megadott hangmagassággal."""
+    cal = workdir / "speakers" / f"{speaker}_cal0.wav"
+    if not cal.exists():
+        return None
+    return preview(cal, workdir / "preview" / f"{speaker}.wav", 1.0, check_pitch(semitones))
 
 
 def request_resynth(m: Manifest, seg_id: int) -> None:

@@ -75,10 +75,12 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
   - Az **Alkalmazás** csak a módosított mondatokat (✏️) generálja újra, utána újraépíti a videót; egy mondat kb. 30 másodperc.
   - A kézzel javított szöveg úgy hangzik el, ahogy beírtad: az LLM nem rövidíti, a túl hosszú mondat inkább gyorsítva lesz.
   - Szűrővel csak az erősen gyorsított vagy a következőbe belelógó (⚠️), illetve csak a módosított mondatok is megjeleníthetők.
+  - Egy mondat hangmagassága külön is emelhető vagy mélyíthető (félhangban, a beszélőén felül), mentés előtt meghallgatható.
 - **Beszélők:**
   - beszélőnként a felismert hangtípus és az alaphang;
   - meghallgatható az eredeti hangminta és a klónozott hang;
   - a hangtípus kézzel átállítható, utána újrafuttatás a voices lépéstől;
+  - a klónozott hang hangmagassága félhangban állítható (előnézettel), vagy visszaállítható az automatikus korrekcióra. Ez csak újrakeveri a videót (kb. 10 mp), új hangot nem generál, és az érték a munka `config.yaml`-jába is bekerül (`speaker_pitch`);
   - előnézet arról, hány beszélő jön ki az egyes küszöbértékekkel.
 
 A nyelv a böngészőt követi, a jobb felső sarokban átváltható. Egyszerre egy munka fut, így elég a 16 GB memória. A futás akkor is folytatódik a háttérben, ha a felületet bezárod; újraindítás után a felület újra megtalálja. A parancssorból indított munkák is megjelennek a felületen.
@@ -104,7 +106,7 @@ Hasznos kapcsolók:
   - gyorsítási határok;
   - a beszélők szétválogatásának érzékenysége (`speaker_threshold`);
   - kézi hangtípus (`speaker_kinds: {SPK2: child}`);
-  - hangmagasság-korrekció (`pitch_correction: off | child | all`);
+  - hangmagasság-korrekció (`pitch_correction: off | child | all`), vagy kézi hangmagasság beszélőnként (`speaker_pitch: {SPK1: 2.5}`);
   - állathangok megtartása (`keep_animal_sounds`).
 
 ### Modellválasztás

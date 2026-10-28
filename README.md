@@ -75,10 +75,12 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
   - **Apply** regenerates only the changed lines (✏️), then rebuilds the video; one line takes about 30 seconds.
   - Hand-edited text is spoken as written: the LLM never shortens it, and a line that is too long is sped up instead.
   - Filters show only the lines that were sped up a lot or run into the next line (⚠️), or only the changed ones.
+  - A single line's pitch can be raised or lowered (semitones, on top of the speaker's), with a preview before saving.
 - **Speakers:**
   - see each speaker's detected voice type and pitch;
   - listen to the original sample and the cloned voice;
   - override the voice type and rerun from the voices step;
+  - set the pitch of a speaker's cloned voice in semitones (with a preview), or go back to the automatic correction. This only remixes the video (about 10 seconds), no voice is regenerated, and the value is kept in the job's `config.yaml` (`speaker_pitch`);
   - preview the speaker count per clustering threshold.
 
 The language follows the browser and can be switched at the top right. Only one job runs at a time; this keeps 16 GB of RAM enough. A job keeps running in the background even if the UI is closed, and the UI picks it up again when restarted. Jobs started from the command line also appear in the UI.
@@ -104,7 +106,7 @@ Useful options:
   - speed-up limits;
   - speaker clustering sensitivity (`speaker_threshold`);
   - manual voice types (`speaker_kinds: {SPK2: child}`);
-  - pitch correction (`pitch_correction: off | child | all`);
+  - pitch correction (`pitch_correction: off | child | all`), or a manual pitch per speaker (`speaker_pitch: {SPK1: 2.5}`);
   - animal sound detection (`keep_animal_sounds`).
 
 ### Choosing models

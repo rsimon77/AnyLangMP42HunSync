@@ -116,3 +116,55 @@ def test_rerun_pending_resets_and_starts(job, monkeypatch):
     m = j.manifest()
     assert m.in_progress == "synthesize" and "align" not in m.steps_done
     assert started == [None]  # sima folytatás, nem --from-step (az mindent újragenerálna)
+
+
+def test_line_pitch_needs_only_remix(tmp_path):
+    m = _manifest(tmp_path)
+    assert not seged.needs_remix(m)
+    assert seged.set_line_pitch(m, 1, 2.5)
+    assert m.segments[1].pitch_offset == 2.5
+    assert seged.needs_remix(m) and seged.pending(m, tmp_path) == []  # nem kell új hang
+    assert "synthesize" in m.steps_done and "align" not in m.steps_done
+    assert "+2.5♪" in seged.rows(m, tmp_path)[1][3]
+    assert not seged.set_line_pitch(m, 1, 2.5)
+    with pytest.raises(seged.EditError):
+        seged.set_line_pitch(m, 1, 13)
+
+
+def test_speaker_pitch_manual_and_auto(tmp_path):
+    from mp4translator.config import Config
+
+    m = _manifest(tmp_path)
+    sp = m.speakers["SPK0"]
+    sp.f0, sp.clone_f0, sp.kind = 400.0, 300.0, "child"
+    cfg = Config()
+    assert seged.set_speaker_pitch(m, "SPK0", -1.5, cfg) == -1.5
+    assert (sp.pitch_shift, sp.pitch_source) == (-1.5, "config") and seged.needs_remix(m)
+    auto = seged.set_speaker_pitch(m, "SPK0", None, cfg)  # vissza az automatikus korrekcióra
+    assert sp.pitch_source == "auto" and auto == pytest.approx(4.98, abs=0.01)
+    with pytest.raises(seged.EditError):
+        seged.set_speaker_pitch(m, "SPK9", 1, cfg)
+
+
+def test_rerun_after_pitch_only_change_skips_synthesis(job, monkeypatch):
+    ws, j = job
+    ws.edit_manifest(j, lambda m: seged.set_line_pitch(m, 0, 1.0))
+    monkeypatch.setattr(ws, "start", lambda job, from_step=None: None)
+    ws.rerun_pending(j)
+    m = j.manifest()
+    assert m.in_progress == "synthesize" and seged.pending(m, j.workdir) == []  # a synthesize azonnal kész
+
+
+def test_previews_shift_pitch(tmp_path):
+    m = _manifest(tmp_path)
+    sr = 16000
+    tone = np.sin(2 * np.pi * 220 * np.arange(sr) / sr).astype(np.float32) * 0.5
+    sf.write(str(tmp_path / m.segments[0].tts_file), tone, sr)
+    out = seged.line_preview(tmp_path, m, 0, 12)
+    y, _ = sf.read(out)
+    spectrum = np.abs(np.fft.rfft(y))
+    assert abs(np.argmax(spectrum) * sr / (2 * (spectrum.size - 1)) - 440) < 10  # egy oktávval feljebb
+    (tmp_path / "speakers").mkdir()
+    sf.write(str(tmp_path / "speakers/SPK0_cal0.wav"), tone, sr)
+    assert seged.speaker_preview(tmp_path, "SPK0", -3).endswith("preview/SPK0.wav")
+    assert seged.speaker_preview(tmp_path, "SPK1", 1) is None

@@ -31,7 +31,7 @@ def write_report(ctx: Context) -> None:
     for name, sp in ctx.manifest.speakers.items():
         lines.append(
             f"| {name} | {KIND_NAMES.get(sp.kind or '', '?')} | {sp.kind_source or '–'} | {hz(sp.f0)} | "
-            f"{hz(sp.clone_f0)} | {sp.pitch_shift:+.1f} félhang | {sp.seconds:.0f} mp |"
+            f"{hz(sp.clone_f0)} | {sp.pitch_shift:+.1f} félhang{' (kézi)' if sp.pitch_source == 'config' else ''} | {sp.seconds:.0f} mp |"
         )
     lines += ["", "## Megtartott állathangok", ""]
     if ctx.manifest.kept_sounds:

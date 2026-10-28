@@ -184,6 +184,9 @@ def build(ws: Workspace) -> gr.Blocks:
                     seg_orig = tr(gr.Audio(label=t("en", "seg_orig_audio"), interactive=False), "seg_orig_audio")
                     seg_dub = tr(gr.Audio(label=t("en", "seg_dub_audio"), interactive=False), "seg_dub_audio")
                 with gr.Row():
+                    seg_pitch = tr(gr.Slider(-12, 12, value=0, step=0.5, label=t("en", "seg_pitch"), scale=3), "seg_pitch")
+                    seg_pitch_btn = tr(gr.Button(t("en", "pitch_preview"), scale=1), "pitch_preview", "value")
+                with gr.Row():
                     seg_save_btn = tr(gr.Button(t("en", "seg_save"), variant="primary"), "seg_save", "value")
                     seg_resynth_btn = tr(gr.Button(t("en", "seg_resynth")), "seg_resynth", "value")
 
@@ -197,6 +200,12 @@ def build(ws: Workspace) -> gr.Blocks:
                     ref_audio = tr(gr.Audio(label=t("en", "ref_audio"), interactive=False), "ref_audio")
                     cal_audio = tr(gr.Audio(label=t("en", "cal_audio"), interactive=False), "cal_audio")
                 apply_btn = tr(gr.Button(t("en", "apply_speakers"), variant="primary"), "apply_speakers", "value")
+                with gr.Row():
+                    sp_pitch = tr(gr.Slider(-12, 12, value=0, step=0.5, label=t("en", "sp_pitch"), scale=3), "sp_pitch")
+                    with gr.Column(scale=1):
+                        sp_pitch_preview_btn = tr(gr.Button(t("en", "pitch_preview")), "pitch_preview", "value")
+                        sp_pitch_auto_btn = tr(gr.Button(t("en", "sp_pitch_auto")), "sp_pitch_auto", "value")
+                sp_pitch_btn = tr(gr.Button(t("en", "sp_pitch_apply"), variant="primary"), "sp_pitch_apply", "value")
                 with gr.Accordion(t("en", "threshold_preview"), open=False) as preview_acc:
                     preview_btn = tr(gr.Button(t("en", "preview"), size="sm"), "preview", "value")
                     preview_df = gr.Dataframe(interactive=False)
@@ -410,14 +419,59 @@ def build(ws: Workspace) -> gr.Blocks:
             names = list(job.manifest().speakers)
             return table, gr.update(choices=names, value=names[0])
 
+        def load_speakers_keep(name, lang, speaker):
+            table, dd = load_speakers(name, lang)
+            return table, (gr.update(value=speaker) if speaker else dd)
+
         def on_speaker(name, speaker):
             job = job_of(name)
             if job is None or not speaker:
-                return None, None, "auto"
+                return None, None, "auto", 0
             ref = job.workdir / "speakers" / f"{speaker}.wav"
             cal = job.workdir / "speakers" / f"{speaker}_cal0.wav"
             kind = ws.job_config(job).speaker_kinds.get(speaker, "auto")
-            return (str(ref) if ref.exists() else None), (str(cal) if cal.exists() else None), kind
+            sp = job.manifest().speakers.get(speaker)
+            pitch = sp.pitch_shift if sp else 0
+            return (str(ref) if ref.exists() else None), (str(cal) if cal.exists() else None), kind, pitch
+
+        def on_sp_pitch_preview(name, lang, speaker, pitch):
+            job = job_of(name)
+            if job is None or not speaker:
+                raise gr.Error(t(lang, "no_speakers"))
+            try:
+                out = seged.speaker_preview(job.workdir, speaker, pitch or 0)
+            except seged.EditError as e:
+                raise gr.Error(str(e))
+            if out is None:
+                raise gr.Error(t(lang, "pitch_no_audio"))
+            return out
+
+        def apply_speaker_pitch(name, lang, speaker, pitch):
+            """Kézi (vagy pitch=None: automatikus) hangmagasság, a config.yaml-ba is, majd újrakeverés."""
+            job = job_of(name)
+            if job is None or not speaker:
+                raise gr.Error(t(lang, "no_speakers"))
+            busy = ws.running()
+            if busy is not None:
+                raise gr.Error(t(lang, "seg_busy", name=busy.name))
+            pitches = dict(ws.job_config(job).speaker_pitch)
+            if pitch is None:
+                pitches.pop(speaker, None)
+            else:
+                pitches[speaker] = float(pitch)
+            cfg = ws.save_config(job, {"speaker_pitch": pitches})  # a voices újrafuttatása is megtartja
+            new = []
+            seg_change(name, lang, lambda m: new.append(seged.set_speaker_pitch(m, speaker, pitch, cfg)))
+            m = job.manifest()
+            if seged.needs_remix(m):
+                try:
+                    ws.rerun_pending(job)
+                except (RuntimeError, seged.EditError) as e:
+                    raise gr.Error(str(e))
+                gr.Info(t(lang, "sp_pitch_applied", speaker=speaker, st=f"{new[0]:+g}"))
+            else:
+                gr.Info(t(lang, "seg_unchanged"))
+            return new[0]
 
         def on_kind(name, speaker, kind):
             job = job_of(name)
@@ -461,11 +515,11 @@ def build(ws: Workspace) -> gr.Blocks:
             if m is None or not any(s.text_hu for s in m.segments):
                 return (gr.update(value=[], headers=seg_headers(lang)), t(lang, "seg_not_ready"),
                         gr.update(interactive=False), gr.update(choices=[]))
-            n = len(seged.pending(m, job.workdir))
+            n, remix = len(seged.pending(m, job.workdir)), seged.needs_remix(m)
             return (
                 gr.update(value=seged.rows(m, job.workdir, only or "all"), headers=seg_headers(lang)),
-                t(lang, "seg_pending", n=n),
-                gr.update(interactive=n > 0 and ws.running() is None),
+                t(lang, "seg_pending", n=n) + (" · " + t(lang, "seg_remix") if remix else ""),
+                gr.update(interactive=(n > 0 or remix) and ws.running() is None),
                 gr.update(choices=list(m.speakers) or ["SPK0"]),
             )
 
@@ -474,10 +528,10 @@ def build(ws: Workspace) -> gr.Blocks:
             job = job_of(name)
             m = job.manifest() if job else None
             if m is None or seg_no is None:
-                return None, "", "", None, None, None
+                return None, "", "", None, None, None, 0
             seg = seged.find(m, int(seg_no))
             return (seg.id, seg.text_en, seg.text_hu or "", seg.speaker,
-                    seged.original_clip(job.workdir, seg), seged.dub_clip(job.workdir, seg))
+                    seged.original_clip(job.workdir, seg), seged.dub_clip(job.workdir, seg), seg.pitch_offset)
 
         def seg_tick(name, lang, only, before):
             """Ha az előző ellenőrzés óta befejeződött egy futás, a mondatok táblázata frissül."""
@@ -502,12 +556,29 @@ def build(ws: Workspace) -> gr.Blocks:
             except seged.EditError as e:
                 raise gr.Error(str(e))
 
-        def on_seg_save(name, lang, seg_no, text, speaker):
+        def on_seg_save(name, lang, seg_no, text, speaker, pitch):
             if seg_no is None:
                 raise gr.Error(t(lang, "seg_pick"))
             changed = []
-            seg_change(name, lang, lambda m: changed.append(seged.edit(m, int(seg_no), text or "", speaker)))
-            gr.Info(t(lang, "seg_saved", id=int(seg_no)) if changed and changed[0] else t(lang, "seg_unchanged"))
+
+            def change(m):
+                changed.append(seged.edit(m, int(seg_no), text or "", speaker))
+                changed.append(seged.set_line_pitch(m, int(seg_no), pitch or 0))
+
+            seg_change(name, lang, change)
+            gr.Info(t(lang, "seg_saved", id=int(seg_no)) if any(changed) else t(lang, "seg_unchanged"))
+
+        def on_seg_pitch_preview(name, lang, seg_no, pitch):
+            job = job_of(name)
+            if job is None or seg_no is None:
+                raise gr.Error(t(lang, "seg_pick"))
+            try:
+                out = seged.line_preview(job.workdir, job.manifest(), int(seg_no), pitch or 0)
+            except seged.EditError as e:
+                raise gr.Error(str(e))
+            if out is None:
+                raise gr.Error(t(lang, "pitch_no_audio"))
+            return out
 
         def on_seg_resynth(name, lang, seg_no):
             if seg_no is None:
@@ -519,7 +590,7 @@ def build(ws: Workspace) -> gr.Blocks:
             job = job_of(name)
             m = job.manifest() if job else None
             n = len(seged.pending(m, job.workdir)) if m else 0
-            if n == 0:
+            if n == 0 and not (m and seged.needs_remix(m)):
                 raise gr.Error(t(lang, "seg_nothing"))
             try:
                 ws.rerun_pending(job)
@@ -565,17 +636,26 @@ def build(ws: Workspace) -> gr.Blocks:
         pull_btn.click(on_pull, [llm, lang], pull_md).then(load_settings, [job_dd, lang], settings_fields)
         tab_result.select(load_result, [job_dd, lang], [video, downloads, report_md])
         tab_speakers.select(load_speakers, [job_dd, lang], [speakers_df, speaker_dd])
-        speaker_dd.change(on_speaker, [job_dd, speaker_dd], [ref_audio, cal_audio, kind_radio])
+        speaker_dd.change(on_speaker, [job_dd, speaker_dd], [ref_audio, cal_audio, kind_radio, sp_pitch])
+        sp_pitch_preview_btn.click(on_sp_pitch_preview, [job_dd, lang, speaker_dd, sp_pitch], cal_audio)
+        sp_pitch_btn.click(apply_speaker_pitch, [job_dd, lang, speaker_dd, sp_pitch], sp_pitch).then(
+            load_speakers_keep, [job_dd, lang, speaker_dd], [speakers_df, speaker_dd]
+        ).then(refresh, [job_dd, lang], status_outputs)
+        sp_pitch_auto_btn.click(lambda n, lg, spk: apply_speaker_pitch(n, lg, spk, None), [job_dd, lang, speaker_dd],
+                                sp_pitch).then(
+            load_speakers_keep, [job_dd, lang, speaker_dd], [speakers_df, speaker_dd]
+        ).then(refresh, [job_dd, lang], status_outputs)
         kind_radio.input(on_kind, [job_dd, speaker_dd, kind_radio])
         apply_btn.click(on_apply, [job_dd, lang]).then(refresh, [job_dd, lang], status_outputs)
         preview_btn.click(on_preview, [job_dd, lang], preview_df)
         seg_outputs = [seg_df, seg_pending_md, seg_apply_btn, seg_speaker]
-        seg_editor = [seg_id, seg_en, seg_hu, seg_speaker, seg_orig, seg_dub]
+        seg_editor = [seg_id, seg_en, seg_hu, seg_speaker, seg_orig, seg_dub, seg_pitch]
+        seg_pitch_btn.click(on_seg_pitch_preview, [job_dd, lang, seg_id, seg_pitch], seg_dub)
         tab_segments.select(load_segments, [job_dd, lang, seg_filter], seg_outputs)
         gr.Timer(3.0).tick(seg_tick, [job_dd, lang, seg_filter, was_running], seg_outputs + [was_running])
         seg_filter.change(load_segments, [job_dd, lang, seg_filter], seg_outputs)
         seg_df.select(on_seg_select, job_dd, seg_editor)
-        seg_save_btn.click(on_seg_save, [job_dd, lang, seg_id, seg_hu, seg_speaker]).then(
+        seg_save_btn.click(on_seg_save, [job_dd, lang, seg_id, seg_hu, seg_speaker, seg_pitch]).then(
             load_segments, [job_dd, lang, seg_filter], seg_outputs
         )
         seg_resynth_btn.click(on_seg_resynth, [job_dd, lang, seg_id]).then(
