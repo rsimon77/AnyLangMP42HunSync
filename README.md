@@ -67,7 +67,8 @@ uv run mp4translator ui          # opens http://127.0.0.1:7860
   - upload a video, which creates a job in `work/<name>/`;
   - start, stop and resume it, or rerun from a chosen step;
   - follow the step progress and the live log;
-  - start Ollama with one click if it is not running.
+  - start Ollama with one click if it is not running;
+  - **clean up the workspace**: first lists what would be deleted and how much space it frees, then deletes on request (see below).
 - **Settings:** translation model (recommended list; ✓ marks downloaded models, and a button downloads the selected one with progress), Whisper and Demucs model, form of address, voice engine (with the XTTS license checkbox), background mode, speaker threshold, speed-up and pitch-correction limits, animal sounds and glossary. They are saved per job to `work/<name>/config.yaml`.
 - **Result:** watch the dubbed video (the browser plays the Hungarian track), download the MP4, the subtitle and the report, and read the report.
 - **Lines:** a table of every line (time, speaker, English, Hungarian, status).
@@ -142,6 +143,23 @@ Reference clips and calibration sentences for each speaker are saved in `work/vi
   - An interrupted step continues where it stopped: finished translation batches and synthesized segments are kept.
 - **Status:** `uv run mp4translator status` shows step progress, segment counts and speaker voice types.
 - Only one run can work on a work folder at a time (`work/<video>/run.pid`).
+
+## Cleaning up
+
+```bash
+uv run mp4translator cleanup          # lists what would be deleted
+uv run mp4translator cleanup --yes    # deletes it
+```
+
+- Deletes only files that no step or edit needs:
+  - previews and unfinished writes;
+  - the intermediate mix (`dub_mix_raw.wav`);
+  - voice files no longer referenced, and outdated fitted voice files;
+  - samples of old speaker groups;
+  - `audio_16k.wav` when the cleaner `asr_16k.wav` exists.
+- Every job stays editable and resumable. A running job is skipped.
+- `--extra` also deletes folders and logs in `work/` that belong to no job, and old manifest copies. A job's source video is never deleted, even when it sits in such a folder.
+- The web UI has the same feature on the Dubbing tab.
 
 ## iCloud
 

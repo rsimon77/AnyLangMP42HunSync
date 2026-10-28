@@ -78,6 +78,33 @@ def models(
         console.print("Letöltés: ollama pull <modell>  (pl. ollama pull translategemma:12b)")
 
 
+@app.command()
+def cleanup(
+    extra: Annotated[
+        bool, typer.Option("--extra", help="A work/ alatti, munkához nem tartozó mappák, naplók és manifest-másolatok is")
+    ] = False,
+    yes: Annotated[bool, typer.Option("--yes", "-y", help="Tényleg töröljön (enélkül csak kiírja, mit törölne)")] = False,
+    work: Annotated[Path, typer.Option("--work", help="A munkák mappája")] = Path("work"),
+) -> None:
+    """Kitakarítja a munkaterületet: csak a felesleges fájlokat törli, a munkák szerkeszthetők maradnak."""
+    from .cleanup import human, plan, remove
+
+    busy = {p.parent for p in work.glob(f"*/{runlock.LOCK_NAME}") if runlock.running_pid(p.parent) is not None}
+    items = plan(work, extra=extra, skip=busy)
+    for wd in busy:
+        console.print(f"[yellow]Kihagyva (éppen fut): {wd}[/yellow]")
+    if not items:
+        console.print("Nincs mit takarítani.")
+        return
+    for item in items:
+        console.print(f"  {human(item.size):>9}  {item.reason:<12} {item.path}", markup=False, highlight=False)
+    total = sum(i.size for i in items)
+    if not yes:
+        console.print(f"Összesen {human(total)} szabadulna fel. Törlés: mp4translator cleanup --yes" + (" --extra" if extra else ""))
+        return
+    console.print(f"Törölve, {human(remove(items))} felszabadult.")
+
+
 def _workdirs(workdir: Path | None) -> list[Path]:
     if workdir is not None:
         return [workdir]

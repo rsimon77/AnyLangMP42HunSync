@@ -6,6 +6,7 @@ import gradio as gr
 import numpy as np
 
 from .. import runlock
+from ..cleanup import human
 from ..models import DEMUCS, LLMS, WHISPERS, ModelChoice, ollama_tag
 from ..ollama import installed_models, is_installed, pull
 from ..pipeline import STEP_NAMES
@@ -103,6 +104,15 @@ def build(ws: Workspace) -> gr.Blocks:
                         steps_md = gr.Markdown()
                     with gr.Column(scale=2):
                         log_box = tr(gr.Textbox(label=t("en", "log"), lines=30, max_lines=30, autoscroll=True), "log")
+                with gr.Accordion(t("en", "clean_title"), open=False) as clean_acc:
+                    tr(gr.Markdown(t("en", "clean_note")), "clean_note", "value")
+                    clean_extra = tr(gr.Checkbox(label=t("en", "clean_extra")), "clean_extra")
+                    with gr.Row():
+                        clean_show_btn = tr(gr.Button(t("en", "clean_show")), "clean_show", "value")
+                        clean_run_btn = tr(gr.Button(t("en", "clean_run"), variant="stop", interactive=False),
+                                           "clean_run", "value")
+                    clean_md = gr.Markdown()
+                    clean_df = gr.Dataframe(interactive=False, visible=False)
 
             # --- 2. Beállítások ---
             with gr.Tab(t("en", "tab_settings")) as tab_settings:
@@ -213,6 +223,7 @@ def build(ws: Workspace) -> gr.Blocks:
         for tab, key in [(tab_jobs, "tab_jobs"), (tab_settings, "tab_settings"), (tab_result, "tab_result"), (tab_segments, "tab_segments"), (tab_speakers, "tab_speakers")]:
             tr(tab, key)
         tr(preview_acc, "threshold_preview")
+        tr(clean_acc, "clean_title")
 
         # --- állapot ---
 
@@ -601,6 +612,27 @@ def build(ws: Workspace) -> gr.Blocks:
                 raise gr.Error(str(e))
             gr.Info(t(lang, "seg_applied", n=n))
 
+        # --- takarítás ---
+
+        def on_clean_show(lang, extra):
+            items = ws.cleanup_plan(bool(extra))
+            if not items:
+                return t(lang, "clean_nothing"), gr.update(visible=False), gr.update(interactive=False)
+            groups: dict[tuple[str, str], list] = {}
+            for item in items:
+                where = item.path.relative_to(ws.work).parts[0]
+                groups.setdefault((where, item.reason), []).append(item)
+            rows = [[where, t(lang, f"clean_{reason}"), len(g), human(sum(i.size for i in g))]
+                    for (where, reason), g in groups.items()]
+            headers = [t(lang, f"clean_col_{c}") for c in ("where", "what", "count", "size")]
+            total = t(lang, "clean_total", size=human(sum(i.size for i in items)), n=len(items))
+            return total, gr.update(value=rows, headers=headers, visible=True), gr.update(interactive=True)
+
+        def on_clean_run(lang, extra):
+            freed = ws.cleanup(bool(extra))  # újratervez: csak azt törli, ami most is felesleges
+            gr.Info(t(lang, "clean_done", size=human(freed)))
+            return t(lang, "clean_done", size=human(freed)), gr.update(visible=False), gr.update(interactive=False)
+
         # --- nyelv ---
 
         def relabel(lang_v):
@@ -648,6 +680,12 @@ def build(ws: Workspace) -> gr.Blocks:
         kind_radio.input(on_kind, [job_dd, speaker_dd, kind_radio])
         apply_btn.click(on_apply, [job_dd, lang]).then(refresh, [job_dd, lang], status_outputs)
         preview_btn.click(on_preview, [job_dd, lang], preview_df)
+        clean_show_btn.click(on_clean_show, [lang, clean_extra], [clean_md, clean_df, clean_run_btn])
+        clean_extra.change(lambda: ("", gr.update(visible=False), gr.update(interactive=False)), None,
+                           [clean_md, clean_df, clean_run_btn])  # a beállítás változott: előbb újra a Mutasd
+        clean_run_btn.click(on_clean_run, [lang, clean_extra], [clean_md, clean_df, clean_run_btn]).then(
+            lambda: gr.update(choices=job_names()), None, job_dd
+        )
         seg_outputs = [seg_df, seg_pending_md, seg_apply_btn, seg_speaker]
         seg_editor = [seg_id, seg_en, seg_hu, seg_speaker, seg_orig, seg_dub, seg_pitch]
         seg_pitch_btn.click(on_seg_pitch_preview, [job_dd, lang, seg_id, seg_pitch], seg_dub)

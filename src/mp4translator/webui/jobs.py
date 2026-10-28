@@ -189,6 +189,20 @@ class Workspace:
             self.edit_manifest(job, prepare_rerun)
             self.start(job)
 
+    def cleanup_plan(self, extra: bool = False) -> list:
+        """Mit törölne a takarítás (az éppen futó munkához nem nyúl)."""
+        from ..cleanup import plan
+
+        busy = self.running()
+        return plan(self.work, extra=extra, skip={busy.workdir} if busy else set())
+
+    def cleanup(self, extra: bool = False) -> int:
+        """Törli a felesleges fájlokat; a felszabadított bájtokat adja. Futás közben is biztonságos (azt kihagyja)."""
+        from ..cleanup import remove
+
+        with self._lock:
+            return remove(self.cleanup_plan(extra))
+
     def stop(self, job: Job) -> bool:
         return runlock.request_stop(job.workdir) is not None
 

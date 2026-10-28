@@ -5,6 +5,14 @@
 - 2. fázis: Demucs háttér-szétválasztás, beszélők szétválogatása (XTTS-beszélővektorok csoportosítása), XTTS-v2 hangklónozás. A mintavideón tesztelve: [samples/](samples/), illetve a scratchpadben a `sample_xtts_hu.mp4`.
 - XTTS licenc elfogadva (`config.yaml`: `xtts_accept_license: true`).
 
+## Munkaterület takarítása (2026-10-28)
+- `mp4translator cleanup [--extra] [--yes]`, illetve a webes felületen a Szinkron fül „Munkaterület takarítása” része. A logika a `src/mp4translator/cleanup.py`-ban van.
+- Alapból csak a sehol nem használt fájlokat törli; a munkák szerkeszthetők és folytathatók maradnak.
+  - Kipróbálva a `bench3_opt` másolatán: 185 MB-ból 144 MB lett, utána az align, a mix és a mux hiba nélkül újraépítette a videót.
+- Az extra szint a munkához nem tartozó mappákat és naplókat is törli, de egy munka forrásvideóját soha (pl. `work/clips/barbie3.mp4` a bench3 munkáké).
+- A jelenlegi munkaterületen: alap 191,8 MB, extrával kb. 210 MB szabadulna fel. A takarítás még nem futott le.
+- 175 teszt, mind átmegy.
+
 ## Hangmagasság beszélőnként és mondatonként (2026-10-28)
 - **Beszélők fül:** a klónozott hang hangmagassága csúszkával állítható (±12 félhang), előnézettel, vagy visszaállítható automatikusra.
   - Az érték a munka `config.yaml`-jába kerül (`speaker_pitch`), így a voices lépés újrafuttatása is megtartja.

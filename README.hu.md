@@ -67,7 +67,8 @@ uv run mp4translator ui          # megnyílik: http://127.0.0.1:7860
   - videó feltöltése, ez új munkát hoz létre a `work/<név>/` mappában;
   - indítás, leállítás, folytatás vagy újrafuttatás egy választott lépéstől;
   - lépésenkénti haladás és élő napló;
-  - ha az Ollama nem fut, egy gombbal elindítható.
+  - ha az Ollama nem fut, egy gombbal elindítható;
+  - **munkaterület takarítása**: előbb kilistázza, mit törölne és mennyi hely szabadulna fel, kérésre töröl (lásd lent).
 - **Beállítások:** fordítómodell (ajánlott lista; a ✓ a letöltött modelleket jelöli, egy gomb letölti a kiválasztottat, haladásjelzővel), Whisper- és Demucs-modell, tegezés/magázás, hangmotor (XTTS-licenc jelölőnégyzettel), háttér, a beszélők szétválogatásának küszöbe, gyorsítási és hangmagasság-korrekciós határok, állathangok, glosszárium. Munkánként a `work/<név>/config.yaml` fájlba mentődnek.
 - **Eredmény:** a szinkronizált videó lejátszása (a böngésző a magyar sávot játssza), az MP4, a felirat és a riport letöltése, a riport megjelenítése.
 - **Mondatok:** az összes mondat táblázatban (idő, beszélő, angol, magyar, állapot).
@@ -142,6 +143,23 @@ A beszélőnkénti hangminták és próbamondatok a `work/video/speakers/` mapp�
   - A félbemaradt lépést onnan folytatja, ahol abbamaradt: a kész fordítási kötegek és a kész szegmenshangok megmaradnak.
 - **Állapot:** az `uv run mp4translator status` a lépéseket, a szegmensek számát és a beszélők hangtípusát mutatja.
 - Egy munkamappán egyszerre csak egy futás dolgozhat (`work/<videó>/run.pid`).
+
+## Takarítás
+
+```bash
+uv run mp4translator cleanup          # kiírja, mit törölne
+uv run mp4translator cleanup --yes    # törli
+```
+
+- Csak olyan fájlokat töröl, amelyekre egyik lépésnek vagy szerkesztésnek sincs szüksége:
+  - előnézetek és félbemaradt írások;
+  - a köztes keverék (`dub_mix_raw.wav`);
+  - már nem használt hangfájlok és elavult illesztett hangfájlok;
+  - régi beszélőcsoportok hangmintái;
+  - az `audio_16k.wav`, ha megvan a tisztább `asr_16k.wav`.
+- Minden munka szerkeszthető és folytatható marad. A futó munkát kihagyja.
+- Az `--extra` a `work/` alatti, munkához nem tartozó mappákat és naplókat, valamint a régi manifest-másolatokat is törli. Egy munka forrásvideóját akkor sem törli, ha ilyen mappában van.
+- A webes felületen ugyanez a Szinkron fülön érhető el.
 
 ## iCloud
 
